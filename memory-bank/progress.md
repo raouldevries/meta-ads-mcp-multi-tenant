@@ -80,39 +80,36 @@ claude mcp list
 
 ---
 
-## Pending Steps
+### Step 5: Test Full Integration ✅
 
-### Step 5: Test Full Integration ⏳
+**Completed:** 2026-01-06
 
-**Action required:** Restart Claude Code and test the MCP tools.
+Successfully tested Meta API connection and retrieved ad accounts:
 
-After restart, try:
-```
-Use the meta-ads-mcp tool to list my ad accounts
-```
+| Field | Value |
+|-------|-------|
+| Account ID | `act_576714580087420` |
+| Name | Solutions Engineering Team - Advertentieaccount |
+| Status | Active |
+| Amount Spent | €65,631.03 |
+| Balance | €418.55 |
+| Currency | EUR |
+| Location | Arnhem, NL |
 
 ---
 
-### Step 6: Configure Claude Desktop (Optional) ⏳
+### Step 6: Configure Claude Desktop ✅
 
-Config file location: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Completed:** 2026-01-06
 
-Example config to add:
-```json
-{
-  "mcpServers": {
-    "meta-ads-mcp": {
-      "command": "/Users/raouldevries/Work/Apps/Meta Ads Analyzer/meta-ads-mcp/venv/bin/python",
-      "args": ["-m", "meta_ads_mcp"],
-      "env": {
-        "META_ACCESS_TOKEN": "your_token",
-        "META_APP_ID": "your_app_id",
-        "META_AD_ACCOUNT_ID": "your_account_id"
-      }
-    }
-  }
-}
-```
+Created config file at: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Configuration includes:
+- Command: Python from virtual environment
+- Args: `-m meta_ads_mcp`
+- Environment variables: META_ACCESS_TOKEN, META_APP_ID, META_AD_ACCOUNT_ID
+
+**Note:** Restart Claude Desktop to load the new MCP server configuration.
 
 ---
 
@@ -145,6 +142,7 @@ Example config to add:
 | Virtual env | `/Users/raouldevries/Work/Apps/Meta Ads Analyzer/meta-ads-mcp/venv` |
 | .env file | `/Users/raouldevries/Work/Apps/Meta Ads Analyzer/meta-ads-mcp/.env` |
 | Python binary | `/Users/raouldevries/Work/Apps/Meta Ads Analyzer/meta-ads-mcp/venv/bin/python` |
+| Claude Desktop config | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 
 ---
 
@@ -155,3 +153,13 @@ If MCP connection fails:
 2. Verify server starts: `cd meta-ads-mcp && source venv/bin/activate && python -m meta_ads_mcp`
 3. Check Claude MCP config: `claude mcp list`
 4. Restart Claude Code after config changes
+
+---
+
+## Setup Complete
+
+All steps completed successfully on 2026-01-06.
+
+The Meta Ads MCP server is now available in:
+- **Claude Code** - Ready to use immediately
+- **Claude Desktop** - Restart the app to activate
