@@ -1,0 +1,29 @@
+# Environment and secrets
+.env
+*.env
+.env.*
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
+
+# Nested git repos (keep meta-ads-mcp as submodule or copy)
+meta-ads-mcp/.git/
