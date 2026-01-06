@@ -163,3 +163,12 @@ All steps completed successfully on 2026-01-06.
 The Meta Ads MCP server is now available in:
 - **Claude Code** - Ready to use immediately
 - **Claude Desktop** - Restart the app to activate
+
+---
+
+## Git History
+
+| Commit | Description |
+|--------|-------------|
+| `a92f664` | Complete Meta Ads MCP setup (Steps 5-6) |
+| `1f28ac2` | Initial commit: Meta Ads MCP server setup |
