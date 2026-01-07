@@ -19,7 +19,7 @@ if not DISABLE_ADS_LIBRARY:
         access_token: Optional[str] = None,
         ad_type: str = "ALL",
         limit: int = 25,  # Default limit, adjust as needed
-        fields: str = "ad_creation_time,ad_creative_body,ad_creative_link_caption,ad_creative_link_description,ad_creative_link_title,ad_delivery_start_time,ad_delivery_stop_time,ad_snapshot_url,currency,demographic_distribution,funding_entity,impressions,page_id,page_name,publisher_platform,region_distribution,spend"
+        fields: str = "id,ad_snapshot_url,ad_delivery_start_time,ad_delivery_stop_time,page_id,page_name,publisher_platforms,languages,target_locations,estimated_audience_size,bylines"
     ) -> str:
         """
         Search the Facebook Ads Library archive.
@@ -41,9 +41,11 @@ if not DISABLE_ADS_LIBRARY:
             -d "access_token=<ACCESS_TOKEN>" \\
             "https://graph.facebook.com/<API_VERSION>/ads_archive"
         """
+        # Use Ad Library specific token if available, otherwise fall back to default
         if not access_token:
-            # Attempt to get token implicitly if not provided - meta_api_tool handles this
-            pass
+            ad_library_token = os.environ.get("META_AD_LIBRARY_ACCESS_TOKEN")
+            if ad_library_token:
+                access_token = ad_library_token
 
         if not search_terms:
             return json.dumps({"error": "search_terms parameter is required"}, indent=2)
