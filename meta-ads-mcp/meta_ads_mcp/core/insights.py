@@ -83,8 +83,8 @@ async def get_insights(object_id: str, access_token: Optional[str] = None,
         params["after"] = after
 
     if action_attribution_windows:
-        # Meta API expects single-quote format: ['1d_click','7d_click']
-        params["action_attribution_windows"] = "[" + ",".join(f"'{w}'" for w in action_attribution_windows) + "]"
+        # Use proper JSON format for the attribution windows array
+        params["action_attribution_windows"] = json.dumps(action_attribution_windows)
 
     data = await make_api_request(endpoint, access_token, params)
     

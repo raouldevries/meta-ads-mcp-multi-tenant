@@ -3,6 +3,9 @@
 import json
 from typing import List, Optional, Dict, Any, Union
 from .api import meta_api_tool, make_api_request
+
+# Type alias for budget values that can be int (cents) or empty string (to remove)
+BudgetValue = Union[int, str, None]
 from .accounts import get_ad_accounts
 from .server import mcp_server
 
@@ -172,7 +175,7 @@ async def create_campaign(
     
     # For this example, we'll add a fixed daily budget if none is provided and we're not using ad set level budgets
     if not daily_budget and not lifetime_budget and not use_adset_level_budgets:
-        daily_budget = "1000"  # Default to $10 USD
+        daily_budget = 1000  # Default to $10 USD (in cents)
     
     endpoint = f"{account_id}/campaigns"
     
@@ -237,8 +240,8 @@ async def update_campaign(
     name: Optional[str] = None,
     status: Optional[str] = None,
     special_ad_categories: Optional[List[str]] = None,
-    daily_budget: Optional[int] = None,
-    lifetime_budget: Optional[int] = None,
+    daily_budget: BudgetValue = None,
+    lifetime_budget: BudgetValue = None,
     bid_strategy: Optional[str] = None,
     bid_cap: Optional[int] = None,
     spend_cap: Optional[int] = None,

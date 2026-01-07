@@ -33,46 +33,51 @@ class TokenInfo:
         if not self.expires_at:
             logger.debug("No expiration date set for token, assuming not expired")
             return False  # If no expiration is set, assume it's not expired
-        
+
         # Parse ISO 8601 date format to timestamp
         try:
             # Convert the expires_at string to a timestamp
             # Format is like "2023-12-31T23:59:59.999Z" or "2023-12-31T23:59:59.999+00:00"
-            from datetime import datetime
-            
-            # Remove the Z suffix if present and handle +00:00 format
+            from datetime import datetime, timezone
+
             expires_at_str = self.expires_at
+
+            # Normalize 'Z' suffix to '+00:00' for fromisoformat compatibility
             if expires_at_str.endswith('Z'):
-                expires_at_str = expires_at_str[:-1]  # Remove Z
-                
-            # Handle microseconds if present
-            if '.' in expires_at_str:
-                datetime_format = "%Y-%m-%dT%H:%M:%S.%f"
-            else:
-                datetime_format = "%Y-%m-%dT%H:%M:%S"
-                
-            # Handle timezone offset
-            timezone_offset = "+00:00"
-            if "+" in expires_at_str:
-                expires_at_str, timezone_offset = expires_at_str.split("+")
-                timezone_offset = "+" + timezone_offset
-            
-            # Parse the datetime without timezone info
-            expires_datetime = datetime.strptime(expires_at_str, datetime_format)
-            
-            # Convert to timestamp (assume UTC)
+                expires_at_str = expires_at_str[:-1] + '+00:00'
+
+            # Use fromisoformat which properly handles timezone offsets (Python 3.7+)
+            try:
+                expires_datetime = datetime.fromisoformat(expires_at_str)
+            except ValueError:
+                # Fallback for formats fromisoformat can't handle
+                # Strip timezone and parse as UTC
+                if '+' in expires_at_str:
+                    expires_at_str = expires_at_str.split('+')[0]
+                if '.' in expires_at_str:
+                    datetime_format = "%Y-%m-%dT%H:%M:%S.%f"
+                else:
+                    datetime_format = "%Y-%m-%dT%H:%M:%S"
+                expires_datetime = datetime.strptime(expires_at_str, datetime_format).replace(tzinfo=timezone.utc)
+
+            # Ensure timezone-aware comparison
+            if expires_datetime.tzinfo is None:
+                expires_datetime = expires_datetime.replace(tzinfo=timezone.utc)
+
+            # Get current UTC time for comparison
+            current_datetime = datetime.now(timezone.utc)
+            current_time = current_datetime.timestamp()
             expires_timestamp = expires_datetime.timestamp()
-            current_time = time.time()
             
             # Check if token is expired and log result
             is_expired = current_time > expires_timestamp
             time_diff = expires_timestamp - current_time
             if is_expired:
-                logger.debug(f"Token is expired! Current time: {datetime.fromtimestamp(current_time)}, " 
-                             f"Expires at: {datetime.fromtimestamp(expires_timestamp)}, "
+                logger.debug(f"Token is expired! Current time: {current_datetime.isoformat()}, "
+                             f"Expires at: {expires_datetime.isoformat()}, "
                              f"Expired {abs(time_diff):.0f} seconds ago")
             else:
-                logger.debug(f"Token is still valid. Expires at: {datetime.fromtimestamp(expires_timestamp)}, "
+                logger.debug(f"Token is still valid. Expires at: {expires_datetime.isoformat()}, "
                              f"Time remaining: {time_diff:.0f} seconds")
             
             return is_expired

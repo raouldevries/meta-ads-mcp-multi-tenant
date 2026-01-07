@@ -322,6 +322,7 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
     params = {}
     
     if frequency_control_specs is not None:
+        # api.py will handle JSON encoding for lists/dicts in POST requests
         params['frequency_control_specs'] = frequency_control_specs
     
     if bid_strategy is not None:

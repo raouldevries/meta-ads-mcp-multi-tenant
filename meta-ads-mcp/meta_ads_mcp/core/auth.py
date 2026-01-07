@@ -197,7 +197,10 @@ class AuthManager:
                     self.token_info = None
                     return False
                 
-                logger.info(f"Loaded cached token (expires in {(self.token_info.created_at + self.token_info.expires_in) - int(time.time())} seconds)")
+                if self.token_info.expires_in:
+                    logger.info(f"Loaded cached token (expires in {(self.token_info.created_at + self.token_info.expires_in) - int(time.time())} seconds)")
+                else:
+                    logger.info("Loaded cached token (no expiration set)")
                 return True
         except Exception as e:
             logger.error(f"Error loading cached token: {e}")

@@ -131,7 +131,7 @@ async def make_api_request(
             error_info = {}
             try:
                 error_info = e.response.json()
-            except:
+            except (json.JSONDecodeError, ValueError):
                 error_info = {"status_code": e.response.status_code, "text": e.response.text}
             
             logger.error(f"HTTP Error: {e.response.status_code} - {error_info}")

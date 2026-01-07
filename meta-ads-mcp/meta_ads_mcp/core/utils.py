@@ -188,50 +188,36 @@ async def download_image(url: str) -> Optional[bytes]:
 
 async def try_multiple_download_methods(url: str) -> Optional[bytes]:
     """
-    Try multiple methods to download an image, with different approaches for Meta CDN.
-    
+    Try to download an image from Meta CDN.
+
     Args:
         url: Image URL
-        
+
     Returns:
         Image data as bytes if successful, None otherwise
     """
-    # Method 1: Direct download with custom headers
+    # Direct download with standard headers
     image_data = await download_image(url)
     if image_data:
         return image_data
-    
-    print("Direct download failed, trying alternative methods...")
-    
-    # Method 2: Try adding Facebook cookie simulation
+
+    print("Direct download failed")
+
+    # Try with browser-like User-Agent as fallback
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
-            "Cookie": "presence=EDvF3EtimeF1697900316EuserFA21B00112233445566AA0EstateFDutF0CEchF_7bCC"  # Fake cookie
         }
-        
+
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, headers=headers, timeout=30.0)
             response.raise_for_status()
-            print(f"Method 2 succeeded with cookie simulation: {len(response.content)} bytes")
+            print(f"Browser-like request succeeded: {len(response.content)} bytes")
             return response.content
     except Exception as e:
-        print(f"Method 2 failed: {str(e)}")
-    
-    # Method 3: Try with session that keeps redirects and cookies
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            # First visit Facebook to get cookies
-            await client.get("https://www.facebook.com/", timeout=30.0)
-            # Then try the image URL
-            response = await client.get(url, timeout=30.0)
-            response.raise_for_status()
-            print(f"Method 3 succeeded with Facebook session: {len(response.content)} bytes")
-            return response.content
-    except Exception as e:
-        print(f"Method 3 failed: {str(e)}")
-    
+        print(f"Fallback download failed: {str(e)}")
+
     return None
 
 

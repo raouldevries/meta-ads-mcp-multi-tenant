@@ -144,7 +144,7 @@ async def create_ad(
         
     # Add tracking specs if provided
     if tracking_specs is not None:
-        params["tracking_specs"] = json.dumps(tracking_specs) # Needs to be JSON encoded string
+        params["tracking_specs"] = json.dumps(tracking_specs)
     
     try:
         data = await make_api_request(endpoint, access_token, params, method="POST")
@@ -545,10 +545,9 @@ async def update_ad(
     if bid_amount is not None:
         # Ensure bid_amount is sent as a string if it's not null
         params["bid_amount"] = str(bid_amount)
-    if tracking_specs is not None: # Add tracking_specs to params if provided
-        params["tracking_specs"] = json.dumps(tracking_specs) # Needs to be JSON encoded string
+    if tracking_specs is not None:
+        params["tracking_specs"] = json.dumps(tracking_specs)
     if creative_id is not None:
-        # Creative parameter needs to be a JSON object containing creative_id
         params["creative"] = json.dumps({"creative_id": creative_id})
 
     if not params:
