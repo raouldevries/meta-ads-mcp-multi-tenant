@@ -170,5 +170,6 @@ The Meta Ads MCP server is now available in:
 
 | Commit | Description |
 |--------|-------------|
+| `31aea3c` | Add git history to progress documentation |
 | `a92f664` | Complete Meta Ads MCP setup (Steps 5-6) |
 | `1f28ac2` | Initial commit: Meta Ads MCP server setup |
