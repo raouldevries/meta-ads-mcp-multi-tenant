@@ -1,6 +1,6 @@
 # Meta Ads MCP Server Setup Progress
 
-**Date:** 2026-01-06
+**Date:** 2026-01-08 (Updated)
 **Project:** Meta Ads Analyzer
 **Goal:** Self-hosted Meta Ads MCP server for Claude Code (and later Claude Desktop)
 
@@ -113,23 +113,50 @@ Configuration includes:
 
 ---
 
-## Available MCP Tools (26 total)
+## Available MCP Tools (63 total)
 
-**Core:**
+### Core Account & Campaign Tools
 - get_ad_accounts, get_account_info, get_campaigns, get_campaign_details
 - get_adsets, get_adset_details, get_ads, get_ad_details
-- get_insights, get_ad_creatives, get_ad_image
+- get_ad_creatives, get_ad_image
 
-**Management:**
+### Management Tools
 - create_campaign, create_adset, create_ad, create_ad_creative
-- update_ad, update_adset, upload_ad_image
+- update_campaign, update_ad, update_adset, update_ad_creative, upload_ad_image
 
-**Targeting:**
-- search_interests, get_interest_suggestions, validate_interests
+### Targeting Tools
+- search_interests, get_interest_suggestions, estimate_audience_size
 - search_behaviors, search_demographics, search_geo_locations
 
-**Other:**
-- create_budget_schedule, get_account_pages, search
+### Insights & Analytics Tools (NEW - 2026-01-08)
+- get_insights (enhanced with action_breakdowns, filtering, sort, time_increment)
+- get_insights_by_time, get_insights_with_actions
+- get_async_job_status, get_async_job_results
+- get_video_insights, get_demographic_insights
+- get_placement_insights, get_device_insights
+- get_deleted_archived_insights
+
+### Audience Tools (NEW - 2026-01-08)
+- get_custom_audiences, get_custom_audience_details
+- get_saved_audiences, get_saved_audience_details
+
+### Pixel & Conversion Tools (NEW - 2026-01-08)
+- get_pixels, get_pixel_details, get_pixel_stats
+- get_pixel_events, get_pixel_code
+- get_custom_conversions, get_custom_conversion_details
+- get_offline_conversion_data_sets
+
+### Lead Generation Tools (NEW - 2026-01-08)
+- get_lead_forms, get_lead_form_details
+- get_leads, get_ad_leads (requires leads_retrieval permission)
+- get_page_lead_access, get_lead_gen_quality_score
+
+### Ad Preview Tools (NEW - 2026-01-08)
+- get_ad_previews, get_ad_preview_all_formats, get_creative_previews
+
+### Other Tools
+- create_budget_schedule, get_account_pages, search, fetch, search_pages_by_name
+- search_ads_archive, get_login_link
 
 ---
 
@@ -166,10 +193,75 @@ The Meta Ads MCP server is now available in:
 
 ---
 
+## Extended API Coverage (2026-01-08)
+
+### Overview
+
+Performed comprehensive Meta API permission audit and added 31 new read-only tools across 5 areas. Total tools increased from 26 to 63.
+
+### New Modules Created
+
+| Module | Tools | Description |
+|--------|-------|-------------|
+| `audiences.py` | 4 | Custom Audiences and Saved Audiences read-only access |
+| `pixels.py` | 9 | Meta Pixel management, stats, custom conversions |
+| `leads.py` | 6 | Lead forms and lead retrieval (requires `leads_retrieval` permission) |
+
+### Enhanced Modules
+
+| Module | Changes |
+|--------|---------|
+| `insights.py` | Added 10 new functions + enhanced `get_insights` with action_breakdowns, filtering, sort, time_increment, custom fields |
+| `ads.py` | Added 3 preview functions for ad rendering |
+
+### Key Features Added
+
+**Insights API Enhancements:**
+- Action breakdowns (action_type, action_device, action_destination, etc.)
+- Filtering support for insights queries
+- Sorting by any metric
+- Time increment for daily/weekly/monthly breakdowns
+- Async job support for large queries
+- Video completion metrics (video_p25_watched_actions, etc.)
+- Specialized helpers: demographic, placement, device insights
+
+**Audience Management:**
+- Custom audience listing with subtype filtering
+- Saved audience (targeting presets) access
+- Lookalike audience specifications
+
+**Pixel & Conversion Tracking:**
+- Meta Pixel listing and details
+- Pixel stats by event, device, browser
+- Pixel JavaScript code retrieval
+- Custom conversions and offline data sets
+
+**Lead Generation:**
+- Lead form listing and details
+- Lead retrieval from forms and ads
+- Quality scores and page access permissions
+
+### Testing
+
+All 257 tests passed after implementation and audit fixes.
+
+### Permissions Note
+
+Most new tools work with existing `ads_read` permission. Exception:
+- `get_leads` and `get_ad_leads` require `leads_retrieval` permission (App Review required)
+
+---
+
 ## Git History
 
 | Commit | Description |
 |--------|-------------|
+| `4f5aa5e` | Add extended Meta API coverage with read-only tools |
+| `512b81b` | Add CLAUDE.md to gitignore |
+| `abd8599` | Add video completion metrics and scalable architecture plan |
+| `9fa377e` | Fix Ad Library API: update deprecated fields and add separate token support |
+| `2d3dd0c` | Update progress documentation |
+| `c46244e` | Fix multiple bugs found during code review |
 | `31aea3c` | Add git history to progress documentation |
 | `a92f664` | Complete Meta Ads MCP setup (Steps 5-6) |
 | `1f28ac2` | Initial commit: Meta Ads MCP server setup |
