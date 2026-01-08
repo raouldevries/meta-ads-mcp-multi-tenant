@@ -68,21 +68,165 @@ async def get_ads(account_id: str, access_token: Optional[str] = None, limit: in
 async def get_ad_details(ad_id: str, access_token: Optional[str] = None) -> str:
     """
     Get detailed information about a specific ad.
-    
+
     Args:
         ad_id: Meta Ads ad ID
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     if not ad_id:
         return json.dumps({"error": "No ad ID provided"}, indent=2)
-        
+
     endpoint = f"{ad_id}"
     params = {
         "fields": "id,name,adset_id,campaign_id,status,creative,created_time,updated_time,bid_amount,conversion_domain,tracking_specs,preview_shareable_link"
     }
-    
+
     data = await make_api_request(endpoint, access_token, params)
-    
+
+    return json.dumps(data, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def get_ad_previews(
+    ad_id: str,
+    ad_format: str = "DESKTOP_FEED_STANDARD",
+    access_token: Optional[str] = None
+) -> str:
+    """
+    Get preview URLs for an ad in various formats.
+
+    Args:
+        ad_id: Meta Ads ad ID
+        ad_format: Preview format. Options:
+                  - DESKTOP_FEED_STANDARD (default)
+                  - MOBILE_FEED_STANDARD
+                  - MOBILE_FEED_BASIC
+                  - RIGHT_COLUMN_STANDARD
+                  - INSTAGRAM_STANDARD
+                  - INSTAGRAM_STORY
+                  - AUDIENCE_NETWORK_INSTREAM_VIDEO
+                  - AUDIENCE_NETWORK_OUTSTREAM_VIDEO
+                  - MESSENGER_MOBILE_INBOX_MEDIA
+                  - MARKETPLACE_MOBILE
+                  - FACEBOOK_STORY_MOBILE
+                  - FACEBOOK_REELS_MOBILE
+                  - INSTAGRAM_REELS
+        access_token: Meta API access token (optional)
+
+    Returns:
+        JSON response with preview iframe HTML and URLs.
+    """
+    if not ad_id:
+        return json.dumps({"error": "No ad ID provided"}, indent=2)
+
+    valid_formats = [
+        "DESKTOP_FEED_STANDARD", "MOBILE_FEED_STANDARD", "MOBILE_FEED_BASIC",
+        "RIGHT_COLUMN_STANDARD", "INSTAGRAM_STANDARD", "INSTAGRAM_STORY",
+        "AUDIENCE_NETWORK_INSTREAM_VIDEO", "AUDIENCE_NETWORK_OUTSTREAM_VIDEO",
+        "MESSENGER_MOBILE_INBOX_MEDIA", "MARKETPLACE_MOBILE",
+        "FACEBOOK_STORY_MOBILE", "FACEBOOK_REELS_MOBILE", "INSTAGRAM_REELS"
+    ]
+
+    if ad_format not in valid_formats:
+        return json.dumps({
+            "error": f"Invalid ad_format: {ad_format}",
+            "valid_formats": valid_formats
+        }, indent=2)
+
+    endpoint = f"{ad_id}/previews"
+    params = {
+        "ad_format": ad_format
+    }
+
+    data = await make_api_request(endpoint, access_token, params)
+    return json.dumps(data, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def get_ad_preview_all_formats(
+    ad_id: str,
+    access_token: Optional[str] = None
+) -> str:
+    """
+    Get preview URLs for an ad in all available formats.
+
+    Args:
+        ad_id: Meta Ads ad ID
+        access_token: Meta API access token (optional)
+
+    Returns:
+        JSON response with previews for multiple ad formats.
+    """
+    if not ad_id:
+        return json.dumps({"error": "No ad ID provided"}, indent=2)
+
+    formats = [
+        "DESKTOP_FEED_STANDARD",
+        "MOBILE_FEED_STANDARD",
+        "INSTAGRAM_STANDARD",
+        "INSTAGRAM_STORY",
+        "FACEBOOK_STORY_MOBILE",
+        "RIGHT_COLUMN_STANDARD"
+    ]
+
+    previews = {}
+    errors = []
+
+    for ad_format in formats:
+        try:
+            endpoint = f"{ad_id}/previews"
+            params = {"ad_format": ad_format}
+            data = await make_api_request(endpoint, access_token, params)
+
+            if "data" in data and data["data"]:
+                previews[ad_format] = data["data"][0]
+            elif "error" not in data:
+                previews[ad_format] = data
+        except Exception as e:
+            errors.append({"format": ad_format, "error": str(e)})
+
+    result = {
+        "ad_id": ad_id,
+        "previews": previews,
+        "formats_retrieved": list(previews.keys()),
+        "total_formats": len(previews)
+    }
+
+    if errors:
+        result["errors"] = errors
+
+    return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def get_creative_previews(
+    creative_id: str,
+    ad_format: str = "DESKTOP_FEED_STANDARD",
+    access_token: Optional[str] = None
+) -> str:
+    """
+    Get preview URLs for a creative (without needing an ad).
+
+    Args:
+        creative_id: Meta Ads creative ID
+        ad_format: Preview format (same options as get_ad_previews)
+        access_token: Meta API access token (optional)
+
+    Returns:
+        JSON response with preview iframe HTML.
+    """
+    if not creative_id:
+        return json.dumps({"error": "No creative ID provided"}, indent=2)
+
+    endpoint = f"{creative_id}/previews"
+    params = {
+        "ad_format": ad_format
+    }
+
+    data = await make_api_request(endpoint, access_token, params)
     return json.dumps(data, indent=2)
 
 

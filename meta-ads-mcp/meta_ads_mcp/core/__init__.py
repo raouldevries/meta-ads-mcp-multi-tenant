@@ -16,6 +16,11 @@ from . import reports  # Import module to register conditional tools
 from . import duplication  # Import module to register conditional duplication tools
 from .openai_deep_research import search, fetch  # OpenAI MCP Deep Research tools
 
+# New modules for extended Meta API coverage
+from . import audiences  # Custom Audiences, Saved Audiences, Lookalike Audiences
+from . import pixels  # Meta Pixel management, custom conversions
+from . import leads  # Lead forms and lead retrieval (requires leads_retrieval permission)
+
 __all__ = [
     'mcp_server',
     'get_ad_accounts',
