@@ -35,3 +35,7 @@ uv.lock
 # Local additions
 venv/
 .env
+
+# Claude-mem auto-generated files
+CLAUDE.md
+**/CLAUDE.md
