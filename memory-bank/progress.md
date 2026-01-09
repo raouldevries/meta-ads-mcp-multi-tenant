@@ -325,6 +325,74 @@ Implemented a production-grade retry mechanism with exponential backoff for hand
 
 ---
 
+### Step 1.2: Health Check Tool ✅
+
+**Completed:** 2026-01-09
+
+Implemented a diagnostic health check tool for validating Meta API connectivity and token status.
+
+#### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/accounts.py` | Modified | Added `health_check` tool function |
+| `tests/test_health_check.py` | Created | Comprehensive test suite (9 tests) |
+
+#### Key Features
+
+**health_check tool:**
+- Token validation via Meta's `debug_token` API
+- Ad accounts accessibility check
+- API latency measurement (per-check and total)
+- Diagnostics output (API base, timestamp)
+
+**Status Levels:**
+| Status | Condition |
+|--------|-----------|
+| `healthy` | Token valid + accounts accessible |
+| `degraded` | Token valid but accounts inaccessible |
+| `unhealthy` | Token invalid |
+| `error` | No token configured or exception |
+
+**Response Format:**
+```json
+{
+  "status": "healthy|degraded|unhealthy|error",
+  "checks": {
+    "token": {"status": "present", "prefix": "EAAx..."},
+    "token_validation": {"status": "valid", "app_id": "...", "scopes": [...]},
+    "ad_accounts": {"status": "accessible", "count": 2, "sample": [...]}
+  },
+  "diagnostics": {
+    "total_latency_ms": 450,
+    "api_base": "https://graph.facebook.com/v22.0",
+    "timestamp": "2026-01-09T10:00:00Z"
+  }
+}
+```
+
+#### Test Coverage
+
+| Test | Description |
+|------|-------------|
+| `test_health_check_no_token` | Returns error when no token configured |
+| `test_health_check_healthy` | Returns healthy with valid token and accounts |
+| `test_health_check_invalid_token` | Returns unhealthy for invalid tokens |
+| `test_health_check_degraded_status` | Returns degraded when token valid but accounts fail |
+| `test_health_check_with_explicit_token` | Uses explicitly provided token |
+| `test_health_check_api_error_handling` | Handles API exceptions gracefully |
+| `test_health_check_includes_diagnostics` | Includes latency and timing info |
+| `test_response_is_valid_json` | Validates JSON response format |
+| `test_response_has_required_fields` | Validates required response fields |
+
+#### Test Results
+
+```
+302 passed, 9 skipped, 2 deselected in 1.32s
+```
+
+---
+
 ## Git History
 
 | Commit | Description |
