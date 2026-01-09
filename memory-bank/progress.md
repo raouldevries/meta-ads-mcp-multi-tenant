@@ -252,10 +252,75 @@ Most new tools work with existing `ads_read` permission. Exception:
 
 ---
 
+## Improvement Plan Implementation (2026-01-09)
+
+### Step 1.1: Centralized Retry/Backoff ✅
+
+**Completed:** 2026-01-09
+
+Implemented a production-grade retry mechanism with exponential backoff for handling Meta API rate limits and transient errors.
+
+#### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/retry.py` | Created | New retry module with complete implementation |
+| `meta_ads_mcp/core/__init__.py` | Modified | Exported retry components |
+| `meta_ads_mcp/core/api.py` | Modified | Integrated retry imports |
+
+#### Key Components
+
+**RetryConfig class:**
+- 16 Meta API error codes mapped with specific retry counts
+- 5 HTTP status codes for retry handling (429, 500, 502, 503, 504)
+- Exponential backoff: 1s → 2s → 4s → 8s... up to 60s max
+- Jitter support (up to 1 second randomization)
+- Honors server-provided `Retry-After` headers
+
+**MetaApiError exception:**
+- Rich error capture (code, subcode, type, status, trace_id)
+- `is_retryable` property for intelligent retry decisions
+- `to_dict()` for JSON serialization
+- Comprehensive `__str__` for logging
+
+**with_retry decorator:**
+- Async-aware implementation
+- Configurable max_retries and retry_on_all_errors
+- Intelligent error-specific retry counts
+- Detailed logging at each attempt
+
+**parse_meta_error function:**
+- Extracts all error details from Meta API responses
+- Handles Retry-After header from multiple locations
+
+#### Error Codes Handled
+
+| Error Code | Description | Default Retries |
+|------------|-------------|-----------------|
+| 1 | Unknown error | 2 |
+| 2 | Service unavailable | 3 |
+| 4 | Rate limit (app level) | 3 |
+| 17 | Rate limit (user level) | 3 |
+| 32 | Rate limit (page level) | 3 |
+| 613 | Rate limit (calls) | 3 |
+| 80000 | Async job failure | 2 |
+| 80004 | Transient error | 3 |
+| 190 | Invalid token | 0 (no retry) |
+| 200 | Permission error | 0 (no retry) |
+| 100 | Invalid parameter | 0 (no retry) |
+
+#### Remaining Steps for 1.1
+
+- [ ] Apply `@with_retry` decorator to `make_api_request` function
+- [ ] Add unit tests (`tests/test_retry.py`)
+
+---
+
 ## Git History
 
 | Commit | Description |
 |--------|-------------|
+| `TBD` | Add centralized retry/backoff mechanism (Step 1.1) |
 | `4f5aa5e` | Add extended Meta API coverage with read-only tools |
 | `512b81b` | Add CLAUDE.md to gitignore |
 | `abd8599` | Add video completion metrics and scalable architecture plan |

@@ -1,6 +1,13 @@
 """Core functionality for Meta Ads API MCP package."""
 
 from .server import mcp_server
+from .retry import (
+    with_retry,
+    RetryConfig,
+    MetaApiError,
+    parse_meta_error,
+    retry_with_backoff
+)
 from .accounts import get_ad_accounts, get_account_info
 from .campaigns import get_campaigns, get_campaign_details, create_campaign
 from .adsets import get_adsets, get_adset_details, update_adset
@@ -23,6 +30,13 @@ from . import leads  # Lead forms and lead retrieval (requires leads_retrieval p
 
 __all__ = [
     'mcp_server',
+    # Retry logic
+    'with_retry',
+    'RetryConfig',
+    'MetaApiError',
+    'parse_meta_error',
+    'retry_with_backoff',
+    # Account tools
     'get_ad_accounts',
     'get_account_info',
     'get_campaigns',
