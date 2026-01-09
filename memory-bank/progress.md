@@ -309,10 +309,19 @@ Implemented a production-grade retry mechanism with exponential backoff for hand
 | 200 | Permission error | 0 (no retry) |
 | 100 | Invalid parameter | 0 (no retry) |
 
-#### Remaining Steps for 1.1
+#### Completed Steps
 
-- [ ] Apply `@with_retry` decorator to `make_api_request` function
-- [ ] Add unit tests (`tests/test_retry.py`)
+- [x] Create `retry.py` module (RetryConfig, MetaApiError, with_retry decorator)
+- [x] Export retry module from `__init__.py`
+- [x] Add retry imports to `api.py`
+- [x] Apply `@with_retry` decorator to `make_api_request` function
+- [x] Add unit tests (`tests/test_retry.py`) - 36 tests passing
+
+#### Test Results
+
+```
+293 passed, 9 skipped, 2 deselected in 2.51s
+```
 
 ---
 

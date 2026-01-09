@@ -9,7 +9,7 @@ import os
 from . import auth
 from .auth import needs_authentication, auth_manager, start_callback_server, shutdown_callback_server
 from .utils import logger
-from .retry import MetaApiError, parse_meta_error, RetryConfig
+from .retry import MetaApiError, parse_meta_error, RetryConfig, with_retry
 
 # Constants
 META_GRAPH_API_VERSION = "v22.0"
@@ -39,6 +39,83 @@ class GraphAPIError(Exception):
             auth_manager.invalidate_token()
 
 
+# Default retry configuration for Meta API requests
+DEFAULT_RETRY_CONFIG = RetryConfig()
+
+
+@with_retry(DEFAULT_RETRY_CONFIG)
+async def _execute_api_request(
+    url: str,
+    method: str,
+    headers: Dict[str, str],
+    request_params: Dict[str, Any],
+    masked_params: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Internal function that executes HTTP requests with retry support.
+
+    Raises MetaApiError for transient errors (will be retried by decorator).
+    Returns response dict on success or raises for permanent errors.
+    """
+    async with httpx.AsyncClient() as client:
+        if method == "GET":
+            # For GET, JSON-encode dict/list params (e.g., targeting_spec) to proper strings
+            encoded_params = {}
+            for key, value in request_params.items():
+                if isinstance(value, (dict, list)):
+                    encoded_params[key] = json.dumps(value)
+                else:
+                    encoded_params[key] = value
+            response = await client.get(url, params=encoded_params, headers=headers, timeout=30.0)
+        elif method == "POST":
+            # For Meta API, POST requests need data, not JSON
+            post_params = request_params.copy()
+            if 'targeting' in post_params and isinstance(post_params['targeting'], dict):
+                post_params['targeting'] = json.dumps(post_params['targeting'])
+
+            # Convert lists and dicts to JSON strings
+            for key, value in post_params.items():
+                if isinstance(value, (list, dict)):
+                    post_params[key] = json.dumps(value)
+
+            logger.debug(f"POST params (prepared): {masked_params}")
+            response = await client.post(url, data=post_params, headers=headers, timeout=30.0)
+        elif method == "DELETE":
+            response = await client.delete(url, params=request_params, headers=headers, timeout=30.0)
+        else:
+            raise ValueError(f"Unsupported HTTP method: {method}")
+
+        # Check for HTTP errors
+        if response.status_code >= 400:
+            error_info = {}
+            try:
+                error_info = response.json()
+            except (json.JSONDecodeError, ValueError):
+                error_info = {"status_code": response.status_code, "text": response.text}
+
+            # Parse error and check if retryable
+            meta_error = parse_meta_error(error_info, response.status_code, dict(response.headers))
+
+            if meta_error.is_retryable:
+                logger.warning(f"Transient error detected (code={meta_error.error_code}, status={meta_error.http_status}), will retry")
+                raise meta_error
+            else:
+                # Non-retryable error - raise with full context
+                logger.error(f"Non-retryable error (code={meta_error.error_code}): {meta_error.message}")
+                raise meta_error
+
+        logger.debug(f"API Response status: {response.status_code}")
+
+        # Parse successful response
+        try:
+            return response.json()
+        except json.JSONDecodeError:
+            return {
+                "text_response": response.text,
+                "status_code": response.status_code
+            }
+
+
 async def make_api_request(
     endpoint: str,
     access_token: str,
@@ -46,16 +123,20 @@ async def make_api_request(
     method: str = "GET"
 ) -> Dict[str, Any]:
     """
-    Make a request to the Meta Graph API.
-    
+    Make a request to the Meta Graph API with automatic retry for transient errors.
+
     Args:
         endpoint: API endpoint path (without base URL)
         access_token: Meta API access token
         params: Additional query parameters
         method: HTTP method (GET, POST, DELETE)
-    
+
     Returns:
         API response as a dictionary
+
+    Note:
+        This function automatically retries on rate limit errors (codes 4, 17, 32, 613, 80004)
+        and server errors (500, 502, 503, 504) with exponential backoff.
     """
     # Validate access token before proceeding
     if not access_token:
@@ -67,121 +148,94 @@ async def make_api_request(
                 "action_required": "Please authenticate first"
             }
         }
-        
+
     url = f"{META_GRAPH_API_BASE}/{endpoint}"
-    
+
     headers = {
         "User-Agent": USER_AGENT,
     }
-    
+
     request_params = params or {}
     request_params["access_token"] = access_token
-    
+
     # Logging the request (masking token for security)
     masked_params = {k: "***TOKEN***" if k == "access_token" else v for k, v in request_params.items()}
     logger.debug(f"API Request: {method} {url}")
     logger.debug(f"Request params: {masked_params}")
-    
+
     # Check for app_id in params
     app_id = auth_manager.app_id
     logger.debug(f"Current app_id from auth_manager: {app_id}")
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            if method == "GET":
-                # For GET, JSON-encode dict/list params (e.g., targeting_spec) to proper strings
-                encoded_params = {}
-                for key, value in request_params.items():
-                    if isinstance(value, (dict, list)):
-                        encoded_params[key] = json.dumps(value)
-                    else:
-                        encoded_params[key] = value
-                response = await client.get(url, params=encoded_params, headers=headers, timeout=30.0)
-            elif method == "POST":
-                # For Meta API, POST requests need data, not JSON
-                if 'targeting' in request_params and isinstance(request_params['targeting'], dict):
-                    # Convert targeting dict to string for the API
-                    request_params['targeting'] = json.dumps(request_params['targeting'])
-                
-                # Convert lists and dicts to JSON strings    
-                for key, value in request_params.items():
-                    if isinstance(value, (list, dict)):
-                        request_params[key] = json.dumps(value)
-                
-                logger.debug(f"POST params (prepared): {masked_params}")
-                response = await client.post(url, data=request_params, headers=headers, timeout=30.0)
-            elif method == "DELETE":
-                response = await client.delete(url, params=request_params, headers=headers, timeout=30.0)
-            else:
-                raise ValueError(f"Unsupported HTTP method: {method}")
-            
-            response.raise_for_status()
-            logger.debug(f"API Response status: {response.status_code}")
-            
-            # Ensure the response is JSON and return it as a dictionary
-            try:
-                return response.json()
-            except json.JSONDecodeError:
-                # If not JSON, return text content in a structured format
-                return {
-                    "text_response": response.text,
-                    "status_code": response.status_code
-                }
-        
-        except httpx.HTTPStatusError as e:
-            error_info = {}
-            try:
-                error_info = e.response.json()
-            except (json.JSONDecodeError, ValueError):
-                error_info = {"status_code": e.response.status_code, "text": e.response.text}
-            
-            logger.error(f"HTTP Error: {e.response.status_code} - {error_info}")
-            
-            # Check for authentication errors
-            if e.response.status_code == 401 or e.response.status_code == 403:
-                logger.warning("Detected authentication error (401/403)")
-                auth_manager.invalidate_token()
-            elif "error" in error_info:
-                error_obj = error_info.get("error", {})
-                # Check for specific FB API errors related to auth
-                if isinstance(error_obj, dict) and error_obj.get("code") in [190, 102, 4, 200, 10]:
-                    logger.warning(f"Detected Facebook API auth error: {error_obj.get('code')}")
-                    # Log more details about app ID related errors
-                    if error_obj.get("code") == 200 and "Provide valid app ID" in error_obj.get("message", ""):
-                        logger.error("Meta API authentication configuration issue")
-                        logger.error(f"Current app_id: {app_id}")
-                        # Provide a clearer error message without the confusing "Provide valid app ID" message
-                        return {
-                            "error": {
-                                "message": "Meta API authentication configuration issue. Please check your app credentials.",
-                                "original_error": error_obj.get("message"),
-                                "code": error_obj.get("code")
-                            }
-                        }
-                    auth_manager.invalidate_token()
-            
-            # Include full details for technical users
-            full_response = {
-                "headers": dict(e.response.headers),
-                "status_code": e.response.status_code,
-                "url": str(e.response.url),
-                "reason": getattr(e.response, "reason_phrase", "Unknown reason"),
-                "request_method": e.request.method,
-                "request_url": str(e.request.url)
-            }
-            
-            # Return a properly structured error object
+
+    try:
+        # Execute request with automatic retry for transient errors
+        return await _execute_api_request(url, method, headers, request_params, masked_params)
+
+    except MetaApiError as e:
+        # Handle Meta API errors (after retry exhaustion for transient errors)
+        logger.error(f"Meta API Error: {e}")
+
+        # Check for authentication errors and invalidate token
+        if e.error_code in [190, 102]:
+            logger.warning(f"Auth error detected (code: {e.error_code}). Invalidating token.")
+            auth_manager.invalidate_token()
+        elif e.http_status in [401, 403]:
+            logger.warning("Detected authentication error (401/403)")
+            auth_manager.invalidate_token()
+        elif e.error_code == 200 and "Provide valid app ID" in (e.message or ""):
+            logger.error("Meta API authentication configuration issue")
+            logger.error(f"Current app_id: {app_id}")
             return {
                 "error": {
-                    "message": f"HTTP Error: {e.response.status_code}",
-                    "details": error_info,
-                    "full_response": full_response
+                    "message": "Meta API authentication configuration issue. Please check your app credentials.",
+                    "original_error": e.message,
+                    "code": e.error_code
                 }
             }
-        
-        except Exception as e:
-            logger.error(f"Request Error: {str(e)}")
-            return {"error": {"message": str(e)}}
+
+        # Return structured error response
+        return {
+            "error": {
+                "message": f"Meta API Error: {e.message}",
+                "code": e.error_code,
+                "error_subcode": e.error_subcode,
+                "error_type": e.error_type,
+                "http_status": e.http_status,
+                "is_transient": e.is_retryable,
+                "fbtrace_id": e.fbtrace_id
+            }
+        }
+
+    except httpx.HTTPStatusError as e:
+        # Fallback for any HTTP errors not caught by _execute_api_request
+        error_info = {}
+        try:
+            error_info = e.response.json()
+        except (json.JSONDecodeError, ValueError):
+            error_info = {"status_code": e.response.status_code, "text": e.response.text}
+
+        logger.error(f"HTTP Error: {e.response.status_code} - {error_info}")
+
+        full_response = {
+            "headers": dict(e.response.headers),
+            "status_code": e.response.status_code,
+            "url": str(e.response.url),
+            "reason": getattr(e.response, "reason_phrase", "Unknown reason"),
+            "request_method": e.request.method,
+            "request_url": str(e.request.url)
+        }
+
+        return {
+            "error": {
+                "message": f"HTTP Error: {e.response.status_code}",
+                "details": error_info,
+                "full_response": full_response
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Request Error: {str(e)}")
+        return {"error": {"message": str(e)}}
 
 
 # Generic wrapper for all Meta API tools
