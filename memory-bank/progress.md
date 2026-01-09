@@ -931,7 +931,7 @@ The existing analysis tools couldn't extract headlines from Advantage+ Creative 
 
 | Commit | Description |
 |--------|-------------|
-| `edf734f` | Add get_headline_performance tool for ad copy analysis |
+| `09504cf` | Add get_headline_performance tool for ad copy analysis |
 | `65dff3d` | Change only_with_spend default to True for all Meta API query tools |
 | `3f19f6b` | Simplify retry module code for clarity (bug fixes + cleanup) |
 | `0332605` | Complete Step 1.1: Integrate retry into API client with tests |
