@@ -434,6 +434,83 @@ export META_API_VERSION=v22.0
 
 ---
 
+### Step 1.4: Pagination Helpers ✅
+
+**Completed:** 2026-01-09
+
+Implemented automatic pagination support for fetching all results from paginated Meta API endpoints.
+
+#### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/pagination.py` | Created | New pagination helper module |
+| `meta_ads_mcp/core/campaigns.py` | Modified | Added `fetch_all` parameter to get_campaigns |
+| `tests/test_pagination.py` | Created | Comprehensive test suite (31 tests) |
+
+#### Key Components
+
+**PaginationConfig class:**
+- DEFAULT_PAGE_SIZE = 25
+- MAX_PAGE_SIZE = 100
+- MAX_PAGES = 100 (safety limit)
+- MAX_ITEMS = 10000 (safety limit)
+- REQUEST_TIMEOUT = 30.0 seconds
+
+**fetch_all_pages function:**
+- Fetches all pages automatically with configurable limits
+- Returns combined data with pagination_info metadata
+- Handles API errors, timeouts, and partial results gracefully
+- Uses httpx AsyncClient (matching codebase patterns)
+
+**paginate_generator function:**
+- Memory-efficient async generator for large datasets
+- Yields items one at a time without loading all into memory
+- Useful for streaming large result sets
+
+**Helper functions:**
+- `add_pagination_params()` - Add limit/after to request params
+- `extract_cursor_from_response()` - Extract 'after' cursor
+- `has_next_page()` - Check if more pages exist
+
+#### Usage Example
+
+```python
+# Single page (default)
+result = await get_campaigns(account_id="act_123")
+
+# Fetch all campaigns automatically
+result = await get_campaigns(account_id="act_123", fetch_all=True)
+
+# With custom page limit
+result = await get_campaigns(account_id="act_123", fetch_all=True, max_pages=10)
+```
+
+#### Response Format (fetch_all=True)
+
+```json
+{
+  "data": [...all items...],
+  "pagination_info": {
+    "pages_fetched": 5,
+    "total_items": 127,
+    "complete": true,
+    "hit_page_limit": false,
+    "hit_item_limit": false,
+    "max_pages": 100,
+    "max_items": 10000
+  }
+}
+```
+
+#### Test Results
+
+```
+333 passed, 9 skipped, 2 deselected in 1.41s
+```
+
+---
+
 ## Git History
 
 | Commit | Description |

@@ -3,6 +3,7 @@
 import json
 from typing import List, Optional, Dict, Any, Union
 from .api import meta_api_tool, make_api_request
+from .pagination import fetch_all_pages
 
 # Type alias for budget values that can be int (cents) or empty string (to remove)
 BudgetValue = Union[int, str, None]
@@ -13,22 +14,24 @@ from .server import mcp_server
 @mcp_server.tool()
 @meta_api_tool
 async def get_campaigns(
-    account_id: str, 
-    access_token: Optional[str] = None, 
-    limit: int = 10, 
-    status_filter: str = "", 
-    objective_filter: Union[str, List[str]] = "", 
-    after: str = ""
+    account_id: str,
+    access_token: Optional[str] = None,
+    limit: int = 10,
+    status_filter: str = "",
+    objective_filter: Union[str, List[str]] = "",
+    after: str = "",
+    fetch_all: bool = False,
+    max_pages: int = 100
 ) -> str:
     """
     Get campaigns for a Meta Ads account with optional filtering.
-    
-    Note: By default, the Meta API returns a subset of available fields. 
-    Other fields like 'effective_status', 'special_ad_categories', 
-    'lifetime_budget', 'spend_cap', 'budget_remaining', 'promoted_object', 
+
+    Note: By default, the Meta API returns a subset of available fields.
+    Other fields like 'effective_status', 'special_ad_categories',
+    'lifetime_budget', 'spend_cap', 'budget_remaining', 'promoted_object',
     'source_campaign_id', etc., might be available but require specifying them
     in the API call (currently not exposed by this tool's parameters).
-    
+
     Args:
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         access_token: Meta API access token (optional - will use cached token if not provided)
@@ -42,48 +45,66 @@ async def get_campaigns(
                          Examples: 'OUTCOME_LEADS' or ['OUTCOME_LEADS', 'OUTCOME_SALES'].
                          Leave empty for all objectives.
         after: Pagination cursor to get the next set of results
+        fetch_all: If True, automatically fetches all pages (default: False)
+        max_pages: Maximum pages to fetch when fetch_all=True (default: 100)
     """
     # Require explicit account_id
     if not account_id:
         return json.dumps({"error": "No account ID specified"}, indent=2)
-    
+
     endpoint = f"{account_id}/campaigns"
     params = {
         "fields": "id,name,objective,status,daily_budget,lifetime_budget,buying_type,start_time,stop_time,created_time,updated_time,bid_strategy",
         "limit": limit
     }
-    
+
     # Build filtering array for complex filtering
     filters = []
-    
+
     if status_filter:
         # API expects an array, encode it as a JSON string
         params["effective_status"] = json.dumps([status_filter])
-    
+
     # Handle objective filtering - supports both single string and list of objectives
     if objective_filter:
         # Convert single string to list for consistent handling
         objectives = [objective_filter] if isinstance(objective_filter, str) else objective_filter
-        
+
         # Filter out empty strings
         objectives = [obj for obj in objectives if obj]
-        
+
         if objectives:
             filters.append({
                 "field": "objective",
                 "operator": "IN",
                 "value": objectives
             })
-    
+
     # Add filtering parameter if we have filters
     if filters:
         params["filtering"] = json.dumps(filters)
-    
+
+    # Use pagination helper for fetch_all mode
+    if fetch_all:
+        from .auth import get_access_token
+        token = access_token or get_access_token()
+        if not token:
+            return json.dumps({"error": "No access token available"}, indent=2)
+
+        result = await fetch_all_pages(
+            endpoint=endpoint,
+            params=params,
+            access_token=token,
+            max_pages=max_pages
+        )
+        return json.dumps(result, indent=2)
+
+    # Standard single-page request
     if after:
         params["after"] = after
-    
+
     data = await make_api_request(endpoint, access_token, params)
-    
+
     return json.dumps(data, indent=2)
 
 
