@@ -91,14 +91,24 @@ async def fetch_all_pages(
                     f"(total: {len(all_items)})"
                 )
 
-                # Check for next page
+                # Check for next page using cursor (not Meta's next URL which has embedded token)
                 paging = data.get("paging", {})
+                cursors = paging.get("cursors", {})
+                after_cursor = cursors.get("after")
                 next_url = paging.get("next")
 
-                if next_url:
-                    # Next URL includes all params, so clear current_params
-                    current_url = next_url
-                    current_params = {}
+                if after_cursor:
+                    # Use cursor directly - preferred method
+                    current_params["after"] = after_cursor
+                elif next_url:
+                    # Fallback: extract after param from next URL
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(next_url)
+                    query_params = parse_qs(parsed.query)
+                    if "after" in query_params:
+                        current_params["after"] = query_params["after"][0]
+                    else:
+                        has_more = False
                 else:
                     has_more = False
 
@@ -193,13 +203,24 @@ async def paginate_generator(
 
                 pages_fetched += 1
 
-                # Get next page URL
+                # Get next page cursor (not Meta's next URL which has embedded token)
                 paging = data.get("paging", {})
+                cursors = paging.get("cursors", {})
+                after_cursor = cursors.get("after")
                 next_url = paging.get("next")
 
-                if next_url:
-                    current_url = next_url
-                    current_params = {}
+                if after_cursor:
+                    # Use cursor directly - preferred method
+                    current_params["after"] = after_cursor
+                elif next_url:
+                    # Fallback: extract after param from next URL
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(next_url)
+                    query_params = parse_qs(parsed.query)
+                    if "after" in query_params:
+                        current_params["after"] = query_params["after"][0]
+                    else:
+                        return
                 else:
                     return
 

@@ -156,7 +156,10 @@ class TestFetchAllPages:
         page1_response = MagicMock()
         page1_response.json.return_value = {
             "data": [{"id": "1"}],
-            "paging": {"next": "https://graph.facebook.com/next"}
+            "paging": {
+                "cursors": {"after": "cursor_page2"},
+                "next": "https://graph.facebook.com/next?after=cursor_page2"
+            }
         }
 
         page2_response = MagicMock()
@@ -186,7 +189,10 @@ class TestFetchAllPages:
         page_response = MagicMock()
         page_response.json.return_value = {
             "data": [{"id": "1"}],
-            "paging": {"next": "https://graph.facebook.com/next"}
+            "paging": {
+                "cursors": {"after": "cursor_next"},
+                "next": "https://graph.facebook.com/next?after=cursor_next"
+            }
         }
 
         with patch("httpx.AsyncClient") as MockClient:
@@ -211,7 +217,10 @@ class TestFetchAllPages:
         page_response = MagicMock()
         page_response.json.return_value = {
             "data": [{"id": str(i)} for i in range(100)],
-            "paging": {"next": "https://graph.facebook.com/next"}
+            "paging": {
+                "cursors": {"after": "cursor_next"},
+                "next": "https://graph.facebook.com/next?after=cursor_next"
+            }
         }
 
         with patch("httpx.AsyncClient") as MockClient:
@@ -293,7 +302,10 @@ class TestFetchAllPages:
         page1_response = MagicMock()
         page1_response.json.return_value = {
             "data": [{"id": "1"}, {"id": "2"}],
-            "paging": {"next": "https://graph.facebook.com/next"}
+            "paging": {
+                "cursors": {"after": "cursor_page2"},
+                "next": "https://graph.facebook.com/next?after=cursor_page2"
+            }
         }
 
         with patch("httpx.AsyncClient") as MockClient:
@@ -350,7 +362,10 @@ class TestPaginateGenerator:
         page1_response = MagicMock()
         page1_response.json.return_value = {
             "data": [{"id": "1"}],
-            "paging": {"next": "https://graph.facebook.com/next"}
+            "paging": {
+                "cursors": {"after": "cursor_page2"},
+                "next": "https://graph.facebook.com/next?after=cursor_page2"
+            }
         }
 
         page2_response = MagicMock()
@@ -380,7 +395,10 @@ class TestPaginateGenerator:
         page_response = MagicMock()
         page_response.json.return_value = {
             "data": [{"id": "1"}],
-            "paging": {"next": "https://graph.facebook.com/next"}
+            "paging": {
+                "cursors": {"after": "cursor_next"},
+                "next": "https://graph.facebook.com/next?after=cursor_next"
+            }
         }
 
         items = []

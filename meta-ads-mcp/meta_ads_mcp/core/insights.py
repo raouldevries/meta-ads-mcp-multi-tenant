@@ -5,6 +5,7 @@ import io
 import json
 from typing import Optional, Union, Dict, List
 from .api import meta_api_tool, make_api_request
+from .pagination import fetch_all_pages
 from .presets import get_insight_fields
 from .server import mcp_server
 
@@ -66,7 +67,9 @@ async def get_insights(
     sort: Optional[List[str]] = None,
     use_unified_attribution_setting: bool = True,
     fields: Optional[List[str]] = None,
-    only_with_spend: bool = True
+    only_with_spend: bool = True,
+    fetch_all: bool = False,
+    max_pages: int = 100
 ) -> str:
     """
     Get performance insights for a campaign, ad set, ad or account.
@@ -107,6 +110,8 @@ async def get_insights(
         use_unified_attribution_setting: Use ad set level attribution settings (default: True, matches Ads Manager)
         fields: Optional custom list of fields to retrieve. If not provided, uses comprehensive default list.
         only_with_spend: When True, only return rows with spend > 0
+        fetch_all: When True, automatically fetches all pages of results (default: False)
+        max_pages: Maximum number of pages to fetch when fetch_all=True (default: 100, safety limit)
 
     Returns:
         JSON response with insights data including metrics, actions, and pagination info.
@@ -159,9 +164,23 @@ async def get_insights(
     if sort:
         params["sort"] = json.dumps(sort)
 
-    data = await make_api_request(endpoint, access_token, params)
+    # Fetch data - either all pages or single page
+    if fetch_all:
+        # Use pagination helper to fetch all pages
+        from .auth import get_current_access_token
+        token = access_token or await get_current_access_token()
+        if not token:
+            return json.dumps({"error": "No access token available"}, indent=2)
+        data = await fetch_all_pages(
+            endpoint=endpoint,
+            params=params,
+            access_token=token,
+            max_pages=max_pages
+        )
+    else:
+        data = await make_api_request(endpoint, access_token, params)
 
-    # Filter to only rows with spend if requested
+    # Filter to only rows with spend if requested (applies to all fetched data)
     if only_with_spend and "data" in data:
         original_count = len(data["data"])
         data["data"] = [
