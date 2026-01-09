@@ -10,8 +10,7 @@ import os
 import time
 
 from .api import meta_api_tool, make_api_request
-from .accounts import get_ad_accounts
-from .utils import download_image, try_multiple_download_methods, ad_creative_images, extract_creative_image_urls
+from .utils import download_image, try_multiple_download_methods, extract_creative_image_urls
 from .server import mcp_server
 
 
@@ -33,31 +32,21 @@ async def get_ads(account_id: str, access_token: Optional[str] = None, limit: in
         campaign_id: Optional campaign ID to filter by
         adset_id: Optional ad set ID to filter by
     """
-    # Require explicit account_id
     if not account_id:
         return json.dumps({"error": "No account ID specified"}, indent=2)
-    
-    # Prioritize adset_id over campaign_id - use adset-specific endpoint
+
+    # Determine endpoint: prioritize adset_id over campaign_id
     if adset_id:
         endpoint = f"{adset_id}/ads"
-        params = {
-            "fields": "id,name,adset_id,campaign_id,status,creative,created_time,updated_time,bid_amount,conversion_domain,tracking_specs",
-            "limit": limit
-        }
-    # Use campaign-specific endpoint if campaign_id is provided
     elif campaign_id:
         endpoint = f"{campaign_id}/ads"
-        params = {
-            "fields": "id,name,adset_id,campaign_id,status,creative,created_time,updated_time,bid_amount,conversion_domain,tracking_specs",
-            "limit": limit
-        }
     else:
-        # Default to account-level endpoint if no specific filters
         endpoint = f"{account_id}/ads"
-        params = {
-            "fields": "id,name,adset_id,campaign_id,status,creative,created_time,updated_time,bid_amount,conversion_domain,tracking_specs",
-            "limit": limit
-        }
+
+    params = {
+        "fields": "id,name,adset_id,campaign_id,status,creative,created_time,updated_time,bid_amount,conversion_domain,tracking_specs",
+        "limit": limit
+    }
 
     data = await make_api_request(endpoint, access_token, params)
     
