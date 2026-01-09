@@ -16,7 +16,6 @@ from .callback_server import (
     start_callback_server,
     shutdown_callback_server,
     token_container,
-    callback_server_port
 )
 
 # Import the new Pipeboard authentication
