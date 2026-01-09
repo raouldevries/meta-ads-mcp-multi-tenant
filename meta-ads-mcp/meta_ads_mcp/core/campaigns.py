@@ -21,7 +21,9 @@ async def get_campaigns(
     objective_filter: Union[str, List[str]] = "",
     after: str = "",
     fetch_all: bool = False,
-    max_pages: int = 100
+    max_pages: int = 100,
+    time_range: Optional[Union[str, Dict[str, str]]] = None,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get campaigns for a Meta Ads account with optional filtering.
@@ -35,7 +37,7 @@ async def get_campaigns(
     Args:
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         access_token: Meta API access token (optional - will use cached token if not provided)
-        limit: Maximum number of campaigns to return (default: 10)
+        limit: Maximum number of campaigns to return (default: 50)
         status_filter: Filter by effective status (e.g., 'ACTIVE', 'PAUSED', 'ARCHIVED').
                        Maps to the 'effective_status' API parameter, which expects an array
                        (this function handles the required JSON formatting). Leave empty for all statuses.
@@ -47,11 +49,108 @@ async def get_campaigns(
         after: Pagination cursor to get the next set of results
         fetch_all: If True, automatically fetches all pages (default: False)
         max_pages: Maximum pages to fetch when fetch_all=True (default: 100)
+        time_range: Time range to filter by spend activity. When provided with only_with_spend=True,
+                   only returns campaigns that had spend in this period.
+                   Presets: today, yesterday, last_7d, last_14d, last_30d, last_90d, this_month, last_month
+                   Or custom: {"since": "YYYY-MM-DD", "until": "YYYY-MM-DD"}
+        only_with_spend: If True and time_range is provided, only returns campaigns with spend > 0
+                        in the specified time range. Also includes spend metrics in the response.
+                        (default: True)
     """
     # Require explicit account_id
     if not account_id:
         return json.dumps({"error": "No account ID specified"}, indent=2)
 
+    # If only_with_spend is True and time_range provided, filter by spend first
+    if only_with_spend and time_range:
+        # Fetch insights to get campaigns with spend
+        insights_endpoint = f"{account_id}/insights"
+        insights_params = {
+            "level": "campaign",
+            "fields": "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm",
+            "limit": 500
+        }
+
+        # Handle time_range parameter
+        if isinstance(time_range, dict):
+            insights_params["time_range"] = json.dumps(time_range)
+        else:
+            insights_params["date_preset"] = time_range
+
+        insights_data = await make_api_request(insights_endpoint, access_token, insights_params)
+
+        if "error" in insights_data:
+            return json.dumps(insights_data, indent=2)
+
+        insights_list = insights_data.get("data", [])
+
+        # Filter campaigns with spend > 0
+        campaigns_with_spend = {}
+        for insight in insights_list:
+            spend = float(insight.get("spend", 0))
+            if spend > 0:
+                campaign_id = insight.get("campaign_id")
+                campaigns_with_spend[campaign_id] = {
+                    "spend": insight.get("spend"),
+                    "impressions": insight.get("impressions"),
+                    "clicks": insight.get("clicks"),
+                    "ctr": insight.get("ctr"),
+                    "cpc": insight.get("cpc"),
+                    "cpm": insight.get("cpm"),
+                }
+
+        if not campaigns_with_spend:
+            return json.dumps({
+                "data": [],
+                "message": "No campaigns with spend found in the specified time range",
+                "time_range": time_range,
+                "account_id": account_id
+            }, indent=2)
+
+        # Fetch campaign details for campaigns with spend
+        campaign_ids = list(campaigns_with_spend.keys())
+
+        # Apply limit
+        if len(campaign_ids) > limit:
+            campaign_ids = campaign_ids[:limit]
+
+        # Fetch each campaign's details and merge with spend data
+        result_campaigns = []
+        for campaign_id in campaign_ids:
+            campaign_endpoint = f"{campaign_id}"
+            campaign_params = {
+                "fields": "id,name,objective,status,daily_budget,lifetime_budget,buying_type,start_time,stop_time,created_time,updated_time,bid_strategy"
+            }
+
+            # Apply status and objective filters if provided
+            campaign_data = await make_api_request(campaign_endpoint, access_token, campaign_params)
+
+            if "error" not in campaign_data:
+                # Check status filter
+                if status_filter and campaign_data.get("status") != status_filter:
+                    continue
+
+                # Check objective filter
+                if objective_filter:
+                    objectives = [objective_filter] if isinstance(objective_filter, str) else objective_filter
+                    if campaign_data.get("objective") not in objectives:
+                        continue
+
+                # Merge spend data
+                campaign_data["performance"] = campaigns_with_spend[campaign_id]
+                result_campaigns.append(campaign_data)
+
+        return json.dumps({
+            "data": result_campaigns,
+            "summary": {
+                "total_campaigns_with_spend": len(result_campaigns),
+                "time_range": time_range,
+                "total_spend": sum(float(c["performance"]["spend"]) for c in result_campaigns),
+                "message": f"Showing {len(result_campaigns)} campaigns with ad spend in the selected period. Set only_with_spend=False to include all campaigns."
+            }
+        }, indent=2)
+
+    # Standard flow: fetch all campaigns without spend filtering
     endpoint = f"{account_id}/campaigns"
     params = {
         "fields": "id,name,objective,status,daily_budget,lifetime_budget,buying_type,start_time,stop_time,created_time,updated_time,bid_strategy",

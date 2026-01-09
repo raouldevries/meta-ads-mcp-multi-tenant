@@ -1,7 +1,7 @@
 """Ad Set-related functionality for Meta Ads API."""
 
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from .api import meta_api_tool, make_api_request
 from .accounts import get_ad_accounts
 from .server import mcp_server
@@ -9,20 +9,125 @@ from .server import mcp_server
 
 @mcp_server.tool()
 @meta_api_tool
-async def get_adsets(account_id: str, access_token: Optional[str] = None, limit: int = 50, campaign_id: str = "") -> str:
+async def get_adsets(
+    account_id: str,
+    access_token: Optional[str] = None,
+    limit: int = 50,
+    campaign_id: str = "",
+    time_range: Optional[Union[str, Dict[str, str]]] = None,
+    only_with_spend: bool = True
+) -> str:
     """
     Get ad sets for a Meta Ads account with optional filtering by campaign.
-    
+
     Args:
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         access_token: Meta API access token (optional - will use cached token if not provided)
-        limit: Maximum number of ad sets to return (default: 10)
+        limit: Maximum number of ad sets to return (default: 50)
         campaign_id: Optional campaign ID to filter by
+        time_range: Time range to filter by spend activity. When provided with only_with_spend=True,
+                   only returns ad sets that had spend in this period.
+                   Presets: today, yesterday, last_7d, last_14d, last_30d, last_90d, this_month, last_month
+                   Or custom: {"since": "YYYY-MM-DD", "until": "YYYY-MM-DD"}
+        only_with_spend: If True and time_range is provided, only returns ad sets with spend > 0
+                        in the specified time range. Also includes spend metrics in the response.
+                        (default: True)
     """
     # Require explicit account_id
     if not account_id:
         return json.dumps({"error": "No account ID specified"}, indent=2)
-    
+
+    # If only_with_spend is True and time_range provided, filter by spend first
+    if only_with_spend and time_range:
+        # Fetch insights to get ad sets with spend
+        insights_endpoint = f"{account_id}/insights"
+        insights_params = {
+            "level": "adset",
+            "fields": "adset_id,adset_name,campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm",
+            "limit": 500
+        }
+
+        # Handle time_range parameter
+        if isinstance(time_range, dict):
+            insights_params["time_range"] = json.dumps(time_range)
+        else:
+            insights_params["date_preset"] = time_range
+
+        # Filter by campaign if provided
+        if campaign_id:
+            insights_params["filtering"] = json.dumps([{
+                "field": "campaign.id",
+                "operator": "EQUAL",
+                "value": campaign_id
+            }])
+
+        insights_data = await make_api_request(insights_endpoint, access_token, insights_params)
+
+        if "error" in insights_data:
+            return json.dumps(insights_data, indent=2)
+
+        insights_list = insights_data.get("data", [])
+
+        # Filter ad sets with spend > 0
+        adsets_with_spend = {}
+        for insight in insights_list:
+            spend = float(insight.get("spend", 0))
+            if spend > 0:
+                adset_id = insight.get("adset_id")
+                adsets_with_spend[adset_id] = {
+                    "spend": insight.get("spend"),
+                    "impressions": insight.get("impressions"),
+                    "clicks": insight.get("clicks"),
+                    "ctr": insight.get("ctr"),
+                    "cpc": insight.get("cpc"),
+                    "cpm": insight.get("cpm"),
+                    "campaign_id": insight.get("campaign_id"),
+                    "campaign_name": insight.get("campaign_name"),
+                }
+
+        if not adsets_with_spend:
+            return json.dumps({
+                "data": [],
+                "message": "No ad sets with spend found in the specified time range",
+                "time_range": time_range,
+                "account_id": account_id,
+                "campaign_id": campaign_id if campaign_id else None
+            }, indent=2)
+
+        # Fetch ad set details for ad sets with spend
+        adset_ids = list(adsets_with_spend.keys())
+
+        # Apply limit
+        if len(adset_ids) > limit:
+            adset_ids = adset_ids[:limit]
+
+        # Fetch each ad set's details and merge with spend data
+        result_adsets = []
+        for adset_id in adset_ids:
+            adset_endpoint = f"{adset_id}"
+            adset_params = {
+                "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,is_dynamic_creative"
+            }
+
+            adset_data = await make_api_request(adset_endpoint, access_token, adset_params)
+
+            if "error" not in adset_data:
+                # Merge spend data
+                adset_data["performance"] = adsets_with_spend[adset_id]
+                result_adsets.append(adset_data)
+
+        return json.dumps({
+            "data": result_adsets,
+            "summary": {
+                "total_adsets_with_spend": len(result_adsets),
+                "time_range": time_range,
+                "total_spend": sum(float(a["performance"]["spend"]) for a in result_adsets),
+                "campaign_id": campaign_id if campaign_id else None,
+                "message": f"Showing {len(result_adsets)} ad sets with ad spend in the selected period. Set only_with_spend=False to include all ad sets."
+            }
+        }, indent=2)
+
+    # Standard flow: fetch all ad sets without spend filtering
     # Change endpoint based on whether campaign_id is provided
     if campaign_id:
         endpoint = f"{campaign_id}/adsets"
@@ -37,11 +142,9 @@ async def get_adsets(account_id: str, access_token: Optional[str] = None, limit:
             "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,is_dynamic_creative,frequency_control_specs{event,interval_days,max_frequency}",
             "limit": limit
         }
-        # Note: Removed the attempt to add campaign_id to params for the account endpoint case, 
-        # as it was ineffective and the logic now uses the correct endpoint for campaign filtering.
 
     data = await make_api_request(endpoint, access_token, params)
-    
+
     return json.dumps(data, indent=2)
 
 

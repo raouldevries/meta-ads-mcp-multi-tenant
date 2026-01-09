@@ -65,7 +65,8 @@ async def get_insights(
     filtering: Optional[List[Dict]] = None,
     sort: Optional[List[str]] = None,
     use_unified_attribution_setting: bool = True,
-    fields: Optional[List[str]] = None
+    fields: Optional[List[str]] = None,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get performance insights for a campaign, ad set, ad or account.
@@ -105,6 +106,7 @@ async def get_insights(
         sort: Optional list of sort fields. Example: ["reach_descending", "impressions_ascending"]
         use_unified_attribution_setting: Use ad set level attribution settings (default: True, matches Ads Manager)
         fields: Optional custom list of fields to retrieve. If not provided, uses comprehensive default list.
+        only_with_spend: When True, only return rows with spend > 0
 
     Returns:
         JSON response with insights data including metrics, actions, and pagination info.
@@ -159,6 +161,21 @@ async def get_insights(
 
     data = await make_api_request(endpoint, access_token, params)
 
+    # Filter to only rows with spend if requested
+    if only_with_spend and "data" in data:
+        original_count = len(data["data"])
+        data["data"] = [
+            item for item in data["data"]
+            if float(item.get("spend", 0)) > 0
+        ]
+        data["_filter_summary"] = {
+            "only_with_spend": True,
+            "original_count": original_count,
+            "filtered_count": len(data["data"]),
+            "removed_count": original_count - len(data["data"]),
+            "message": f"Showing {len(data['data'])} items with ad spend in the selected period. Set only_with_spend=False to include all {original_count} items."
+        }
+
     return json.dumps(data, indent=2)
 
 
@@ -171,7 +188,8 @@ async def get_insights_by_time(
     time_range: Union[str, Dict[str, str]] = "last_30d",
     breakdown: str = "",
     level: str = "ad",
-    limit: int = 100
+    limit: int = 100,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get insights broken down by time period (daily, weekly, or monthly).
@@ -187,6 +205,7 @@ async def get_insights_by_time(
         breakdown: Optional additional breakdown (e.g., "age", "gender")
         level: Level of aggregation (ad, adset, campaign, account)
         limit: Maximum results per page (default: 100)
+        only_with_spend: When True, only return rows with spend > 0
 
     Returns:
         JSON response with time-series insights data.
@@ -212,6 +231,22 @@ async def get_insights_by_time(
         params["breakdowns"] = breakdown
 
     data = await make_api_request(endpoint, access_token, params)
+
+    # Filter to only rows with spend if requested
+    if only_with_spend and "data" in data:
+        original_count = len(data["data"])
+        data["data"] = [
+            item for item in data["data"]
+            if float(item.get("spend", 0)) > 0
+        ]
+        data["_filter_summary"] = {
+            "only_with_spend": True,
+            "original_count": original_count,
+            "filtered_count": len(data["data"]),
+            "removed_count": original_count - len(data["data"]),
+            "message": f"Showing {len(data['data'])} items with ad spend in the selected period. Set only_with_spend=False to include all {original_count} items."
+        }
+
     return json.dumps(data, indent=2)
 
 
@@ -295,7 +330,8 @@ async def get_insights_with_actions(
     access_token: Optional[str] = None,
     time_range: Union[str, Dict[str, str]] = "last_30d",
     level: str = "ad",
-    limit: int = 50
+    limit: int = 50,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get insights with detailed action breakdowns.
@@ -316,6 +352,7 @@ async def get_insights_with_actions(
         time_range: Date preset or custom range
         level: Level of aggregation
         limit: Maximum results per page
+        only_with_spend: When True, only return rows with spend > 0
 
     Returns:
         JSON response with insights including action breakdowns in the actions field.
@@ -341,6 +378,22 @@ async def get_insights_with_actions(
         params["date_preset"] = time_range
 
     data = await make_api_request(endpoint, access_token, params)
+
+    # Filter to only rows with spend if requested
+    if only_with_spend and "data" in data:
+        original_count = len(data["data"])
+        data["data"] = [
+            item for item in data["data"]
+            if float(item.get("spend", 0)) > 0
+        ]
+        data["_filter_summary"] = {
+            "only_with_spend": True,
+            "original_count": original_count,
+            "filtered_count": len(data["data"]),
+            "removed_count": original_count - len(data["data"]),
+            "message": f"Showing {len(data['data'])} items with ad spend in the selected period. Set only_with_spend=False to include all {original_count} items."
+        }
+
     return json.dumps(data, indent=2)
 
 
@@ -636,7 +689,8 @@ async def get_video_insights(
     access_token: Optional[str] = None,
     time_range: Union[str, Dict[str, str]] = "last_30d",
     level: str = "ad",
-    limit: int = 50
+    limit: int = 500,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get video-specific performance insights.
@@ -646,7 +700,10 @@ async def get_video_insights(
         access_token: Meta API access token (optional)
         time_range: Date preset or custom range
         level: Level of aggregation
-        limit: Maximum results per page
+        limit: Maximum results per page (default: 500 for comprehensive video analysis)
+        only_with_spend: When True, only return ads that had actual ad spend within the
+                        time range. This filters out ads with zero spend, which is useful
+                        for performance analysis where you only want to see paid results.
 
     Returns:
         JSON response with video metrics including watch percentages and thruplay.
@@ -682,6 +739,24 @@ async def get_video_insights(
         params["date_preset"] = time_range
 
     data = await make_api_request(endpoint, access_token, params)
+
+    # Filter to only ads with spend if requested
+    if only_with_spend and "data" in data:
+        original_count = len(data["data"])
+        data["data"] = [
+            item for item in data["data"]
+            if float(item.get("spend", 0)) > 0
+        ]
+        filtered_count = len(data["data"])
+
+        # Add summary info about filtering
+        data["_filter_summary"] = {
+            "only_with_spend": True,
+            "original_count": original_count,
+            "filtered_count": filtered_count,
+            "removed_count": original_count - filtered_count
+        }
+
     return json.dumps(data, indent=2)
 
 
@@ -693,7 +768,8 @@ async def get_demographic_insights(
     access_token: Optional[str] = None,
     time_range: Union[str, Dict[str, str]] = "last_30d",
     level: str = "account",
-    limit: int = 100
+    limit: int = 100,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get insights broken down by demographic dimensions.
@@ -711,6 +787,7 @@ async def get_demographic_insights(
         time_range: Date preset or custom range
         level: Level of aggregation
         limit: Maximum results per page
+        only_with_spend: When True, only return rows with spend > 0
 
     Returns:
         JSON response with insights broken down by demographics.
@@ -733,6 +810,22 @@ async def get_demographic_insights(
         params["date_preset"] = time_range
 
     data = await make_api_request(endpoint, access_token, params)
+
+    # Filter to only rows with spend if requested
+    if only_with_spend and "data" in data:
+        original_count = len(data["data"])
+        data["data"] = [
+            item for item in data["data"]
+            if float(item.get("spend", 0)) > 0
+        ]
+        data["_filter_summary"] = {
+            "only_with_spend": True,
+            "original_count": original_count,
+            "filtered_count": len(data["data"]),
+            "removed_count": original_count - len(data["data"]),
+            "message": f"Showing {len(data['data'])} items with ad spend in the selected period. Set only_with_spend=False to include all {original_count} items."
+        }
+
     return json.dumps(data, indent=2)
 
 
@@ -743,7 +836,8 @@ async def get_placement_insights(
     access_token: Optional[str] = None,
     time_range: Union[str, Dict[str, str]] = "last_30d",
     level: str = "account",
-    limit: int = 100
+    limit: int = 100,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get insights broken down by ad placement (Facebook Feed, Instagram Stories, etc.).
@@ -754,6 +848,7 @@ async def get_placement_insights(
         time_range: Date preset or custom range
         level: Level of aggregation
         limit: Maximum results per page
+        only_with_spend: When True, only return rows with spend > 0
 
     Returns:
         JSON response with insights broken down by publisher_platform and platform_position.
@@ -776,6 +871,22 @@ async def get_placement_insights(
         params["date_preset"] = time_range
 
     data = await make_api_request(endpoint, access_token, params)
+
+    # Filter to only rows with spend if requested
+    if only_with_spend and "data" in data:
+        original_count = len(data["data"])
+        data["data"] = [
+            item for item in data["data"]
+            if float(item.get("spend", 0)) > 0
+        ]
+        data["_filter_summary"] = {
+            "only_with_spend": True,
+            "original_count": original_count,
+            "filtered_count": len(data["data"]),
+            "removed_count": original_count - len(data["data"]),
+            "message": f"Showing {len(data['data'])} items with ad spend in the selected period. Set only_with_spend=False to include all {original_count} items."
+        }
+
     return json.dumps(data, indent=2)
 
 
@@ -786,7 +897,8 @@ async def get_device_insights(
     access_token: Optional[str] = None,
     time_range: Union[str, Dict[str, str]] = "last_30d",
     level: str = "account",
-    limit: int = 100
+    limit: int = 100,
+    only_with_spend: bool = True
 ) -> str:
     """
     Get insights broken down by device type.
@@ -797,6 +909,7 @@ async def get_device_insights(
         time_range: Date preset or custom range
         level: Level of aggregation
         limit: Maximum results per page
+        only_with_spend: When True, only return rows with spend > 0
 
     Returns:
         JSON response with insights broken down by device_platform and impression_device.
@@ -819,4 +932,20 @@ async def get_device_insights(
         params["date_preset"] = time_range
 
     data = await make_api_request(endpoint, access_token, params)
+
+    # Filter to only rows with spend if requested
+    if only_with_spend and "data" in data:
+        original_count = len(data["data"])
+        data["data"] = [
+            item for item in data["data"]
+            if float(item.get("spend", 0)) > 0
+        ]
+        data["_filter_summary"] = {
+            "only_with_spend": True,
+            "original_count": original_count,
+            "filtered_count": len(data["data"]),
+            "removed_count": original_count - len(data["data"]),
+            "message": f"Showing {len(data['data'])} items with ad spend in the selected period. Set only_with_spend=False to include all {original_count} items."
+        }
+
     return json.dumps(data, indent=2)

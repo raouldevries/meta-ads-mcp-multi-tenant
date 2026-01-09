@@ -2,7 +2,7 @@
 
 import json
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 import io
 from PIL import Image as PILImage
 from mcp.server.fastmcp import Image
@@ -20,21 +20,124 @@ ENABLE_SAVE_AD_IMAGE_LOCALLY = bool(os.environ.get("META_ADS_ENABLE_SAVE_AD_IMAG
 
 @mcp_server.tool()
 @meta_api_tool
-async def get_ads(account_id: str, access_token: Optional[str] = None, limit: int = 50,
-                 campaign_id: str = "", adset_id: str = "") -> str:
+async def get_ads(
+    account_id: str,
+    access_token: Optional[str] = None,
+    limit: int = 50,
+    campaign_id: str = "",
+    adset_id: str = "",
+    time_range: Optional[Union[str, Dict[str, str]]] = None,
+    only_with_spend: bool = True
+) -> str:
     """
     Get ads for a Meta Ads account with optional filtering.
-    
+
     Args:
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         access_token: Meta API access token (optional - will use cached token if not provided)
         limit: Maximum number of ads to return (default: 50)
         campaign_id: Optional campaign ID to filter by
         adset_id: Optional ad set ID to filter by
+        time_range: Time range for spend filtering. Either a preset string (e.g., 'last_30d', 'last_7d',
+                   'this_month', 'last_month') or a dict with 'since' and 'until' dates in 'YYYY-MM-DD' format.
+                   Only used when only_with_spend=True.
+        only_with_spend: When True, only return ads that had actual ad spend within the specified
+                        time_range. Requires time_range to be set. This filters out ads with no
+                        activity in the selected period, which is useful for performance analysis.
     """
     if not account_id:
         return json.dumps({"error": "No account ID specified"}, indent=2)
 
+    # If only_with_spend is True, we need to filter by spend using insights
+    if only_with_spend:
+        if not time_range:
+            return json.dumps({
+                "error": "time_range is required when only_with_spend=True",
+                "hint": "Provide a time_range like 'last_30d' or {'since': '2024-01-01', 'until': '2024-01-31'}"
+            }, indent=2)
+
+        # First, get insights to find ads with spend
+        insights_endpoint = f"{account_id}/insights"
+        insights_params = {
+            "level": "ad",
+            "fields": "ad_id,ad_name,spend,impressions,clicks",
+            "limit": 500  # Higher limit to get all ads with spend
+        }
+
+        # Add campaign_id or adset_id filter to insights if provided
+        filtering = []
+        if adset_id:
+            filtering.append({"field": "adset.id", "operator": "EQUAL", "value": adset_id})
+        elif campaign_id:
+            filtering.append({"field": "campaign.id", "operator": "EQUAL", "value": campaign_id})
+
+        if filtering:
+            insights_params["filtering"] = json.dumps(filtering)
+
+        # Handle time_range
+        if isinstance(time_range, dict):
+            insights_params["time_range"] = json.dumps(time_range)
+        else:
+            insights_params["date_preset"] = time_range
+
+        insights_data = await make_api_request(insights_endpoint, access_token, insights_params)
+
+        if "error" in insights_data:
+            return json.dumps(insights_data, indent=2)
+
+        # Filter ads with spend > 0
+        ads_with_spend = []
+        spend_map = {}  # Map ad_id to spend data
+
+        for insight in insights_data.get("data", []):
+            spend = float(insight.get("spend", 0))
+            if spend > 0:
+                ad_id = insight.get("ad_id")
+                ads_with_spend.append(ad_id)
+                spend_map[ad_id] = {
+                    "spend": insight.get("spend"),
+                    "impressions": insight.get("impressions"),
+                    "clicks": insight.get("clicks")
+                }
+
+        if not ads_with_spend:
+            return json.dumps({
+                "data": [],
+                "message": f"No ads with spend found in the selected time range",
+                "time_range": time_range,
+                "filters": {
+                    "campaign_id": campaign_id if campaign_id else None,
+                    "adset_id": adset_id if adset_id else None
+                }
+            }, indent=2)
+
+        # Fetch full ad details for ads with spend
+        # Use batch requests or individual requests (individual for simplicity)
+        ads_data = []
+        for ad_id in ads_with_spend[:limit]:  # Respect the limit
+            ad_endpoint = f"{ad_id}"
+            ad_params = {
+                "fields": "id,name,adset_id,campaign_id,status,creative,created_time,updated_time,bid_amount,conversion_domain,tracking_specs"
+            }
+
+            ad_data = await make_api_request(ad_endpoint, access_token, ad_params)
+
+            if "error" not in ad_data:
+                # Merge spend data
+                ad_data["_spend_data"] = spend_map.get(ad_id, {})
+                ads_data.append(ad_data)
+
+        return json.dumps({
+            "data": ads_data,
+            "summary": {
+                "total_ads_with_spend": len(ads_with_spend),
+                "returned": len(ads_data),
+                "time_range": time_range,
+                "message": f"Showing {len(ads_data)} ads with ad spend in the selected period. Set only_with_spend=False to include all ads."
+            }
+        }, indent=2)
+
+    # Standard flow: fetch ads without spend filtering
     # Determine endpoint: prioritize adset_id over campaign_id
     if adset_id:
         endpoint = f"{adset_id}/ads"
@@ -49,7 +152,7 @@ async def get_ads(account_id: str, access_token: Optional[str] = None, limit: in
     }
 
     data = await make_api_request(endpoint, access_token, params)
-    
+
     return json.dumps(data, indent=2)
 
 
