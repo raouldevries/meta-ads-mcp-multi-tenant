@@ -86,8 +86,8 @@ async def get_campaigns(
 
     # Use pagination helper for fetch_all mode
     if fetch_all:
-        from .auth import get_access_token
-        token = access_token or get_access_token()
+        from .auth import get_current_access_token
+        token = access_token or await get_current_access_token()
         if not token:
             return json.dumps({"error": "No access token available"}, indent=2)
 
