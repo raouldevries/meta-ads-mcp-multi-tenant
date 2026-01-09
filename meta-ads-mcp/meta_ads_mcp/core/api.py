@@ -11,14 +11,28 @@ from .auth import needs_authentication, auth_manager, start_callback_server, shu
 from .utils import logger
 from .retry import MetaApiError, parse_meta_error, with_retry
 
-# Constants
-META_GRAPH_API_VERSION = "v22.0"
+# API Version Configuration
+# Can be overridden via META_API_VERSION environment variable
+# Default: v23.0 (upgraded from v22.0 on 2026-01-09)
+DEFAULT_API_VERSION = "v23.0"
+META_GRAPH_API_VERSION = os.environ.get("META_API_VERSION", DEFAULT_API_VERSION)
 META_GRAPH_API_BASE = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}"
 USER_AGENT = "meta-ads-mcp/1.0"
 
+
+def get_api_base_url() -> str:
+    """Get the Meta Graph API base URL with configured version."""
+    return META_GRAPH_API_BASE
+
+
+def get_api_version() -> str:
+    """Get the current Meta Graph API version."""
+    return META_GRAPH_API_VERSION
+
+
 # Log key environment and configuration at startup
 logger.info("Core API module initialized")
-logger.info(f"Graph API Version: {META_GRAPH_API_VERSION}")
+logger.info(f"Graph API Version: {META_GRAPH_API_VERSION} (default: {DEFAULT_API_VERSION})")
 logger.info(f"META_APP_ID env var present: {'Yes' if os.environ.get('META_APP_ID') else 'No'}")
 
 class GraphAPIError(Exception):

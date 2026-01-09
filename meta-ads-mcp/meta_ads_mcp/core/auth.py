@@ -22,6 +22,9 @@ from .callback_server import (
 # Import the new Pipeboard authentication
 from .pipeboard_auth import pipeboard_auth_manager
 
+# API Version - uses same env var as api.py for consistency
+META_API_VERSION = os.environ.get("META_API_VERSION", "v23.0")
+
 # Auth constants
 # Scope includes pages_show_list and pages_read_engagement to fix issue #16
 # where get_account_pages failed for regular users due to missing page permissions
@@ -229,7 +232,7 @@ class AuthManager:
     def get_auth_url(self) -> str:
         """Generate the Facebook OAuth URL for desktop app flow"""
         return (
-            f"https://www.facebook.com/v22.0/dialog/oauth?"
+            f"https://www.facebook.com/{META_API_VERSION}/dialog/oauth?"
             f"client_id={self.app_id}&"
             f"redirect_uri={self.redirect_uri}&"
             f"scope={AUTH_SCOPE}&"
@@ -406,7 +409,7 @@ def exchange_token_for_long_lived(short_lived_token):
             return None
             
         # Make the API request to exchange the token
-        url = "https://graph.facebook.com/v22.0/oauth/access_token"
+        url = f"https://graph.facebook.com/{META_API_VERSION}/oauth/access_token"
         params = {
             "grant_type": "fb_exchange_token",
             "client_id": app_id,

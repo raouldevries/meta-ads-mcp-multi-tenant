@@ -16,6 +16,9 @@ logger.setLevel(logging.DEBUG)
 # Base URL for pipeboard API
 PIPEBOARD_API_BASE = "https://pipeboard.co/api"
 
+# API Version - uses same env var as api.py for consistency
+META_API_VERSION = os.environ.get("META_API_VERSION", "v23.0")
+
 # Debug message about API base URL
 logger.info(f"Pipeboard API base URL: {PIPEBOARD_API_BASE}")
 
@@ -453,8 +456,7 @@ class PipeboardAuthManager:
             
         try:
             # Make a simple request to the /me endpoint to test the token
-            META_GRAPH_API_VERSION = "v22.0"
-            url = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}/me"
+            url = f"https://graph.facebook.com/{META_API_VERSION}/me"
             headers = {"Authorization": f"Bearer {self.token_info.access_token}"}
             
             logger.debug(f"Testing token validity with request to {url}")

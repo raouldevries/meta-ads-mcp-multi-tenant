@@ -131,6 +131,29 @@ Meta Ads MCP also supports a local streamable HTTP transport, allowing you to ru
 
 For advanced users who need to self-host, the package can be installed from source. Local installations require creating your own Meta Developer App. **We recommend using [Remote MCP](https://pipeboard.co) for a simpler experience.**
 
+### Environment Variables
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `META_ACCESS_TOKEN` | Meta API access token | - | Yes (if not using Pipeboard) |
+| `META_APP_ID` | Meta Developer App ID | - | Yes (for OAuth flow) |
+| `META_APP_SECRET` | Meta Developer App Secret | - | Optional (for token exchange) |
+| `META_AD_ACCOUNT_ID` | Default ad account ID | - | Optional |
+| `PIPEBOARD_API_TOKEN` | Pipeboard API token | - | Yes (if using Pipeboard auth) |
+| `META_API_VERSION` | Meta Graph API version | `v23.0` | No |
+
+**API Version Configuration:**
+
+The server uses Meta Graph API v23.0 by default. To use a different version (e.g., for testing or compatibility):
+
+```bash
+# Use a specific API version
+export META_API_VERSION=v22.0
+
+# Or in your MCP configuration
+-e META_API_VERSION=v22.0
+```
+
 ### Available MCP Tools
 
 1. `mcp_meta_ads_get_ad_accounts`

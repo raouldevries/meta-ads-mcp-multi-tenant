@@ -393,6 +393,47 @@ Implemented a diagnostic health check tool for validating Meta API connectivity 
 
 ---
 
+### Step 1.3: API v23.0 Upgrade ✅
+
+**Completed:** 2026-01-09
+
+Upgraded Meta Graph API from v22.0 to v23.0 with configurable version support.
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `meta_ads_mcp/core/api.py` | Added configurable API version via `META_API_VERSION` env var |
+| `meta_ads_mcp/core/auth.py` | Updated OAuth URLs to use configurable version |
+| `meta_ads_mcp/core/pipeboard_auth.py` | Updated token validation URL to use configurable version |
+| `README.md` | Added Environment Variables documentation |
+
+#### Key Features
+
+**Configurable API Version:**
+- Default: `v23.0` (upgraded from `v22.0`)
+- Override via `META_API_VERSION` environment variable
+- All API calls now use the configurable version
+- Helper functions: `get_api_base_url()`, `get_api_version()`
+
+**Environment Variable:**
+```bash
+# Use a specific API version
+export META_API_VERSION=v22.0
+```
+
+**Breaking Change Mitigation:**
+- Users can revert to v22.0 if needed by setting the environment variable
+- All existing functionality preserved with the new version
+
+#### Test Results
+
+```
+302 passed, 9 skipped, 2 deselected in 1.31s
+```
+
+---
+
 ## Git History
 
 | Commit | Description |
