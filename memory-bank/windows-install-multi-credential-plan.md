@@ -1077,3 +1077,796 @@ Claude: "Je NYMA video heeft de beste retention: 83% kijkt 25% en 14% kijkt
 - `video_p75_watched_actions` - Aantal views tot 75%
 - `video_p100_watched_actions` - Aantal views tot 100%
 - `video_thruplay_watched_actions` - ThruPlay views (15 sec of volledige video)
+
+---
+
+# Part 4: Multi-Tenant Architecture (10 Accounts, 3 API Keys)
+
+**Added:** 2026-01-08
+**Status:** Requirements defined, not yet implemented
+
+## The Scaling Challenge
+
+When managing 10 ad accounts with 3 shared API keys, neither the current meta-ads-mcp nor meta-mcp-compare architecture is designed for this out of the box.
+
+### Current Limitation
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Current Architecture (Single-Tenant)                        │
+│                                                              │
+│  .env file:                                                  │
+│    META_ACCESS_TOKEN=EAAxxxxx  ← Single token                │
+│                                                              │
+│  Problem:                                                    │
+│    - 1 token per server instance                             │
+│    - No account-to-key routing                               │
+│    - No per-account rate limiting                            │
+│    - One exhausted key blocks everything                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Target Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Multi-Tenant Architecture (10 accounts, 3 API keys)         │
+│                                                              │
+│  credentials.json:                                           │
+│    api_keys:                                                 │
+│      key_1 → [account_a, account_b, account_c, account_d]    │
+│      key_2 → [account_e, account_f, account_g]               │
+│      key_3 → [account_h, account_i, account_j]               │
+│                                                              │
+│  Features:                                                   │
+│    ✅ Token routing (which key for which account)            │
+│    ✅ Per-account rate limiting                              │
+│    ✅ Key health tracking                                    │
+│    ✅ Automatic failover when key exhausted                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Requirements Analysis
+
+### Requirement 1: Token Routing
+
+**Problem:** 3 API keys must be mapped to 10 accounts. Each account can only use specific keys based on Business Manager access.
+
+**Solution:** Extended credentials.json with key-to-account mapping.
+
+```json
+{
+  "api_keys": {
+    "key_agency_1": {
+      "access_token": "EAAxxxxx...",
+      "app_id": "123456789",
+      "accounts": ["company_a", "company_b", "company_c", "company_d"],
+      "rate_limit_tier": "standard",
+      "daily_quota": 50000
+    },
+    "key_agency_2": {
+      "access_token": "EAAyyyyy...",
+      "app_id": "987654321",
+      "accounts": ["company_e", "company_f", "company_g"],
+      "rate_limit_tier": "standard",
+      "daily_quota": 50000
+    },
+    "key_personal": {
+      "access_token": "EAAzzzzz...",
+      "app_id": "555555555",
+      "accounts": ["company_h", "company_i", "company_j"],
+      "rate_limit_tier": "development",
+      "daily_quota": 5000
+    }
+  },
+  "accounts": {
+    "company_a": {
+      "display_name": "Company A Ads",
+      "ad_account_id": "act_111111111",
+      "api_key": "key_agency_1"
+    },
+    "company_b": {
+      "display_name": "Company B Ads",
+      "ad_account_id": "act_222222222",
+      "api_key": "key_agency_1"
+    },
+    "company_e": {
+      "display_name": "Company E Ads",
+      "ad_account_id": "act_555555555",
+      "api_key": "key_agency_2"
+    }
+  },
+  "default_account": "company_a"
+}
+```
+
+### Requirement 2: Per-Account Rate Limiting
+
+**Problem:** Without per-account rate limiting, one account can exhaust the shared API quota, blocking all other accounts on the same key.
+
+**Solution:** Port rate limiter from meta-mcp-compare (TypeScript → Python).
+
+**Rate Limiter Specification:**
+
+| Aspect | Development Tier | Standard Tier |
+|--------|-----------------|---------------|
+| Max Score | 60 points | 9,000 points |
+| Decay Window | 5 minutes | 5 minutes |
+| Block Duration | 5 minutes | 1 minute |
+| Read Call Cost | 1 point | 1 point |
+| Write Call Cost | 3 points | 3 points |
+
+**Implementation Pattern:**
+
+```python
+# meta_ads_mcp/core/rate_limiter.py (NEW FILE)
+
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Dict, Optional
+import threading
+
+@dataclass
+class AccountRateLimitState:
+    """Track rate limit state per account."""
+    account_id: str
+    current_score: float
+    last_decay: datetime
+    blocked_until: Optional[datetime]
+    api_key: str  # Track which key this account uses
+
+class RateLimiter:
+    """Per-account rate limiter with exponential decay."""
+
+    DEVELOPMENT_TIER = {
+        "max_score": 60,
+        "decay_window_minutes": 5,
+        "block_duration_minutes": 5,
+        "read_cost": 1,
+        "write_cost": 3
+    }
+
+    STANDARD_TIER = {
+        "max_score": 9000,
+        "decay_window_minutes": 5,
+        "block_duration_minutes": 1,
+        "read_cost": 1,
+        "write_cost": 3
+    }
+
+    def __init__(self):
+        self._state: Dict[str, AccountRateLimitState] = {}
+        self._lock = threading.Lock()
+
+    def check_rate_limit(self, account_id: str, api_key: str, is_write: bool = False) -> bool:
+        """
+        Check if request is allowed for account.
+
+        Returns:
+            True if request allowed, False if rate limited
+        """
+        pass
+
+    def get_current_score(self, account_id: str) -> float:
+        """Get current usage score for account."""
+        pass
+
+    def get_remaining_capacity(self, account_id: str, api_key: str) -> int:
+        """Get remaining API call capacity."""
+        pass
+
+    def is_account_blocked(self, account_id: str) -> bool:
+        """Check if account is currently blocked."""
+        pass
+
+    def get_block_time_remaining(self, account_id: str) -> Optional[int]:
+        """Get seconds until block expires, or None if not blocked."""
+        pass
+
+    def record_api_call(self, account_id: str, api_key: str, is_write: bool = False):
+        """Record an API call and update score."""
+        pass
+
+    def _apply_decay(self, state: AccountRateLimitState, tier: dict):
+        """Apply exponential decay to score."""
+        pass
+
+# Global singleton
+rate_limiter = RateLimiter()
+```
+
+### Requirement 3: Key Health Tracking
+
+**Problem:** Need to know when an API key is exhausted, about to be rate limited, or has errors.
+
+**Solution:** Key health monitor that tracks:
+- Current usage across all accounts using this key
+- Error rates (401s, 429s, 500s)
+- Last successful call timestamp
+- Estimated time until quota reset
+
+```python
+# meta_ads_mcp/core/key_health.py (NEW FILE)
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, List, Optional
+from enum import Enum
+
+class KeyHealthStatus(Enum):
+    HEALTHY = "healthy"           # <50% quota used, no errors
+    WARNING = "warning"           # 50-80% quota used
+    CRITICAL = "critical"         # >80% quota used
+    EXHAUSTED = "exhausted"       # Rate limited or blocked
+    ERROR = "error"               # Repeated auth/server errors
+
+@dataclass
+class ApiKeyHealth:
+    """Health status for an API key."""
+    key_name: str
+    status: KeyHealthStatus
+    accounts_using: List[str]
+    total_calls_today: int
+    daily_quota: int
+    quota_percent_used: float
+    error_count_last_hour: int
+    last_successful_call: Optional[datetime]
+    last_error: Optional[str]
+    estimated_reset: Optional[datetime]
+
+class KeyHealthMonitor:
+    """Monitor health of all API keys."""
+
+    def __init__(self, credentials_manager):
+        self.credentials = credentials_manager
+        self._call_counts: Dict[str, int] = {}
+        self._error_counts: Dict[str, List[datetime]] = {}
+
+    def get_key_health(self, key_name: str) -> ApiKeyHealth:
+        """Get health status for specific key."""
+        pass
+
+    def get_all_keys_health(self) -> Dict[str, ApiKeyHealth]:
+        """Get health status for all keys."""
+        pass
+
+    def get_healthiest_key_for_account(self, account_name: str) -> Optional[str]:
+        """Get the healthiest available key for an account (for failover)."""
+        pass
+
+    def record_success(self, key_name: str):
+        """Record successful API call."""
+        pass
+
+    def record_error(self, key_name: str, error_type: str, error_message: str):
+        """Record API error."""
+        pass
+
+    def should_failover(self, key_name: str) -> bool:
+        """Check if we should try a different key."""
+        pass
+```
+
+### Requirement 4: Retry/Backoff Logic
+
+**Problem:** Meta API rate limits are aggressive. Without retry logic, temporary rate limits cause permanent failures.
+
+**Solution:** Centralized retry with exponential backoff and jitter.
+
+```python
+# meta_ads_mcp/core/retry.py (NEW FILE)
+
+import asyncio
+import random
+from typing import Callable, TypeVar, Optional
+from functools import wraps
+
+T = TypeVar('T')
+
+class RetryConfig:
+    """Configuration for retry behavior."""
+
+    # Error codes that trigger retry
+    RETRYABLE_CODES = {
+        4: 3,      # Application limit - 3 retries
+        17: 3,     # User limit - 3 retries
+        613: 2,    # Calls limit - 2 retries
+        500: 3,    # Server error - 3 retries
+        502: 3,    # Bad gateway - 3 retries
+        503: 3,    # Service unavailable - 3 retries
+    }
+
+    # Backoff configuration
+    INITIAL_DELAY_MS = 1000
+    MAX_DELAY_MS = 60000
+    JITTER_MS = 1000
+
+    @classmethod
+    def get_retry_count(cls, error_code: int) -> int:
+        """Get number of retries for error code."""
+        return cls.RETRYABLE_CODES.get(error_code, 0)
+
+    @classmethod
+    def calculate_delay(cls, attempt: int, retry_after: Optional[int] = None) -> float:
+        """
+        Calculate delay before next retry.
+
+        Args:
+            attempt: Current attempt number (0-indexed)
+            retry_after: Server-provided Retry-After header value in seconds
+
+        Returns:
+            Delay in seconds
+        """
+        if retry_after:
+            return retry_after
+
+        # Exponential backoff: min(1000 * 2^attempt, 60000) + random jitter
+        delay_ms = min(cls.INITIAL_DELAY_MS * (2 ** attempt), cls.MAX_DELAY_MS)
+        jitter = random.randint(0, cls.JITTER_MS)
+        return (delay_ms + jitter) / 1000
+
+def with_retry(max_retries: int = 3):
+    """
+    Decorator for API calls with automatic retry.
+
+    Usage:
+        @with_retry(max_retries=3)
+        async def make_api_call(...):
+            ...
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> T:
+            last_error = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except MetaApiError as e:
+                    last_error = e
+                    retry_count = RetryConfig.get_retry_count(e.error_code)
+
+                    if attempt >= retry_count:
+                        raise
+
+                    delay = RetryConfig.calculate_delay(
+                        attempt,
+                        e.retry_after if hasattr(e, 'retry_after') else None
+                    )
+
+                    logger.warning(
+                        f"API call failed (attempt {attempt + 1}/{retry_count}), "
+                        f"retrying in {delay:.1f}s: {e.message}"
+                    )
+
+                    await asyncio.sleep(delay)
+
+            raise last_error
+
+        return wrapper
+    return decorator
+```
+
+---
+
+## Updated credentials.py Design
+
+### New File Structure
+
+```python
+# meta_ads_mcp/core/credentials.py (EXPANDED)
+
+import json
+import pathlib
+import platform
+import os
+from typing import Dict, List, Optional
+from dataclasses import dataclass
+
+@dataclass
+class ApiKeyConfig:
+    """Configuration for a single API key."""
+    name: str
+    access_token: str
+    app_id: str
+    accounts: List[str]
+    rate_limit_tier: str  # "development" or "standard"
+    daily_quota: int
+
+@dataclass
+class AccountConfig:
+    """Configuration for a single ad account."""
+    name: str
+    display_name: str
+    ad_account_id: str
+    api_key: str  # Reference to ApiKeyConfig.name
+
+class CredentialManager:
+    """
+    Multi-tenant credential manager.
+
+    Handles:
+    - Loading credentials from JSON file
+    - Token routing (account → API key)
+    - Rate limiting per account
+    - Key health monitoring
+    - Failover when key exhausted
+    """
+
+    def __init__(self):
+        self.api_keys: Dict[str, ApiKeyConfig] = {}
+        self.accounts: Dict[str, AccountConfig] = {}
+        self.default_account: Optional[str] = None
+        self._current_account: Optional[str] = None
+        self._rate_limiter = RateLimiter()
+        self._key_health = KeyHealthMonitor(self)
+        self._load_credentials()
+
+    def _get_credentials_path(self) -> pathlib.Path:
+        """Get platform-specific credentials path."""
+        if platform.system() == "Windows":
+            base_path = pathlib.Path(os.environ.get("APPDATA", ""))
+        elif platform.system() == "Darwin":  # macOS
+            base_path = pathlib.Path.home() / "Library" / "Application Support"
+        else:  # Linux
+            base_path = pathlib.Path.home() / ".config"
+        return base_path / "meta-ads-mcp" / "credentials.json"
+
+    def _load_credentials(self):
+        """Load credentials from JSON file or fall back to .env."""
+        cred_path = self._get_credentials_path()
+
+        if cred_path.exists():
+            with open(cred_path) as f:
+                data = json.load(f)
+
+            # Load API keys
+            for key_name, key_data in data.get("api_keys", {}).items():
+                self.api_keys[key_name] = ApiKeyConfig(
+                    name=key_name,
+                    access_token=key_data["access_token"],
+                    app_id=key_data.get("app_id", ""),
+                    accounts=key_data.get("accounts", []),
+                    rate_limit_tier=key_data.get("rate_limit_tier", "standard"),
+                    daily_quota=key_data.get("daily_quota", 50000)
+                )
+
+            # Load accounts
+            for acc_name, acc_data in data.get("accounts", {}).items():
+                self.accounts[acc_name] = AccountConfig(
+                    name=acc_name,
+                    display_name=acc_data["display_name"],
+                    ad_account_id=acc_data["ad_account_id"],
+                    api_key=acc_data["api_key"]
+                )
+
+            self.default_account = data.get("default_account")
+            self._current_account = self.default_account
+        else:
+            # Fall back to .env for backward compatibility
+            self._load_from_env()
+
+    def _load_from_env(self):
+        """Backward compatibility: load single account from .env."""
+        token = os.environ.get("META_ACCESS_TOKEN")
+        account_id = os.environ.get("META_AD_ACCOUNT_ID")
+        app_id = os.environ.get("META_APP_ID", "")
+
+        if token and account_id:
+            self.api_keys["default"] = ApiKeyConfig(
+                name="default",
+                access_token=token,
+                app_id=app_id,
+                accounts=["default"],
+                rate_limit_tier="standard",
+                daily_quota=50000
+            )
+            self.accounts["default"] = AccountConfig(
+                name="default",
+                display_name="Default Account",
+                ad_account_id=account_id,
+                api_key="default"
+            )
+            self.default_account = "default"
+            self._current_account = "default"
+
+    # === Token Routing ===
+
+    def get_token_for_account(self, account_name: str) -> Optional[str]:
+        """
+        Get the API access token for a specific account.
+
+        This is the core routing function that maps accounts to keys.
+        """
+        account = self.accounts.get(account_name)
+        if not account:
+            return None
+
+        api_key = self.api_keys.get(account.api_key)
+        if not api_key:
+            return None
+
+        # Check rate limit before returning token
+        if not self._rate_limiter.check_rate_limit(
+            account_name,
+            account.api_key,
+            is_write=False
+        ):
+            raise RateLimitExceeded(
+                f"Account {account_name} is rate limited. "
+                f"Try again in {self._rate_limiter.get_block_time_remaining(account_name)} seconds."
+            )
+
+        return api_key.access_token
+
+    def get_ad_account_id(self, account_name: str) -> Optional[str]:
+        """Get the ad account ID for a specific account."""
+        account = self.accounts.get(account_name)
+        return account.ad_account_id if account else None
+
+    # === Account Management ===
+
+    def list_accounts(self) -> List[Dict]:
+        """List all configured accounts with their status."""
+        return [
+            {
+                "name": acc.name,
+                "display_name": acc.display_name,
+                "ad_account_id": acc.ad_account_id,
+                "api_key": acc.api_key,
+                "rate_limit_status": self._rate_limiter.get_current_score(acc.name),
+                "is_blocked": self._rate_limiter.is_account_blocked(acc.name)
+            }
+            for acc in self.accounts.values()
+        ]
+
+    def list_api_keys(self) -> List[Dict]:
+        """List all API keys with their health status."""
+        return [
+            {
+                "name": key.name,
+                "accounts": key.accounts,
+                "tier": key.rate_limit_tier,
+                "daily_quota": key.daily_quota,
+                "health": self._key_health.get_key_health(key.name)
+            }
+            for key in self.api_keys.values()
+        ]
+
+    def get_current_account(self) -> Optional[str]:
+        """Get the currently active account name."""
+        return self._current_account
+
+    def set_current_account(self, account_name: str) -> bool:
+        """Set the current active account."""
+        if account_name in self.accounts:
+            self._current_account = account_name
+            return True
+        return False
+
+    # === Health & Monitoring ===
+
+    def record_api_call(self, account_name: str, is_write: bool = False):
+        """Record an API call for rate limiting."""
+        account = self.accounts.get(account_name)
+        if account:
+            self._rate_limiter.record_api_call(
+                account_name,
+                account.api_key,
+                is_write
+            )
+            self._key_health.record_success(account.api_key)
+
+    def record_api_error(self, account_name: str, error_code: int, error_message: str):
+        """Record an API error for health tracking."""
+        account = self.accounts.get(account_name)
+        if account:
+            self._key_health.record_error(
+                account.api_key,
+                str(error_code),
+                error_message
+            )
+
+    def get_system_health(self) -> Dict:
+        """Get overall system health summary."""
+        return {
+            "total_accounts": len(self.accounts),
+            "total_api_keys": len(self.api_keys),
+            "accounts_blocked": sum(
+                1 for acc in self.accounts
+                if self._rate_limiter.is_account_blocked(acc)
+            ),
+            "keys_exhausted": sum(
+                1 for key in self.api_keys.values()
+                if self._key_health.get_key_health(key.name).status.value == "exhausted"
+            ),
+            "keys_health": {
+                key.name: self._key_health.get_key_health(key.name).status.value
+                for key in self.api_keys.values()
+            }
+        }
+
+# Singleton instance
+credential_manager = CredentialManager()
+```
+
+---
+
+## New MCP Tools for Multi-Tenant
+
+### Tool: `list_configured_accounts`
+
+```python
+@mcp_server.tool()
+async def list_configured_accounts() -> str:
+    """
+    List all configured Meta Ads accounts with their status.
+
+    Returns:
+        JSON with account names, display names, API key assignments,
+        and current rate limit status.
+    """
+    accounts = credential_manager.list_accounts()
+    return json.dumps({
+        "total_accounts": len(accounts),
+        "current_account": credential_manager.get_current_account(),
+        "accounts": accounts
+    }, indent=2)
+```
+
+### Tool: `list_api_keys`
+
+```python
+@mcp_server.tool()
+async def list_api_keys() -> str:
+    """
+    List all configured API keys with health status.
+
+    Returns:
+        JSON with key names, assigned accounts, tier, quota usage,
+        and health status.
+    """
+    keys = credential_manager.list_api_keys()
+    return json.dumps({
+        "total_keys": len(keys),
+        "keys": keys
+    }, indent=2)
+```
+
+### Tool: `get_system_health`
+
+```python
+@mcp_server.tool()
+async def get_system_health() -> str:
+    """
+    Get overall health status of the multi-tenant system.
+
+    Returns:
+        JSON with account counts, blocked accounts, exhausted keys,
+        and per-key health status.
+    """
+    health = credential_manager.get_system_health()
+    return json.dumps(health, indent=2)
+```
+
+### Tool: `switch_account`
+
+```python
+@mcp_server.tool()
+async def switch_account(account_name: str) -> str:
+    """
+    Switch to a different configured account.
+
+    Args:
+        account_name: Name of the account to switch to
+
+    Returns:
+        Confirmation message with account details
+    """
+    if credential_manager.set_current_account(account_name):
+        account = credential_manager.accounts[account_name]
+        return json.dumps({
+            "success": True,
+            "message": f"Switched to {account.display_name}",
+            "account": {
+                "name": account.name,
+                "display_name": account.display_name,
+                "ad_account_id": account.ad_account_id
+            }
+        })
+    else:
+        return json.dumps({
+            "success": False,
+            "error": f"Account '{account_name}' not found",
+            "available_accounts": list(credential_manager.accounts.keys())
+        })
+```
+
+---
+
+## Files to Create/Modify
+
+### New Files
+
+| File | Purpose | Est. Lines |
+|------|---------|------------|
+| `core/rate_limiter.py` | Per-account rate limiting | ~150 |
+| `core/key_health.py` | API key health monitoring | ~120 |
+| `core/retry.py` | Retry with exponential backoff | ~80 |
+
+### Modified Files
+
+| File | Changes |
+|------|---------|
+| `core/credentials.py` | Expand to multi-tenant (as shown above) |
+| `core/auth.py` | Use credential_manager for token lookup |
+| `core/api.py` | Add retry decorator, rate limit recording |
+| All tool files | Add `account_name` parameter |
+
+---
+
+## Implementation Priority
+
+### Phase 1: Core Infrastructure (8-12 hours)
+
+1. [ ] Create `rate_limiter.py` with per-account scoring
+2. [ ] Create `retry.py` with exponential backoff
+3. [ ] Expand `credentials.py` with multi-key support
+4. [ ] Update `auth.py` to use credential_manager
+5. [ ] Update `api.py` with retry decorator
+
+### Phase 2: Health Monitoring (4-6 hours)
+
+6. [ ] Create `key_health.py` with status tracking
+7. [ ] Add health recording to API calls
+8. [ ] Add `get_system_health` tool
+9. [ ] Add `list_api_keys` tool
+
+### Phase 3: Integration (4-6 hours)
+
+10. [ ] Update all existing tools with `account_name` parameter
+11. [ ] Test with 3 API keys, 10 accounts
+12. [ ] Verify rate limiting works correctly
+13. [ ] Verify failover behavior
+
+### Phase 4: Documentation & Testing (2-4 hours)
+
+14. [ ] Update README with multi-tenant setup
+15. [ ] Add unit tests for rate limiter
+16. [ ] Add integration tests for token routing
+17. [ ] Document credentials.json format
+
+---
+
+## Estimated Total Effort
+
+| Component | Effort |
+|-----------|--------|
+| Port rate limiter from meta-mcp-compare | 2-4 hours |
+| Build token router | 4-8 hours |
+| Build key health monitor | 2-4 hours |
+| Add retry/backoff logic | 2-4 hours |
+| Update all tools with account_name | 2-4 hours |
+| Testing with 3 keys, 10 accounts | 2-4 hours |
+| Documentation | 1-2 hours |
+| **Total** | **15-30 hours** |
+
+---
+
+## Why meta-ads-mcp Over meta-mcp-compare for Multi-Tenant
+
+Based on repo comparison analysis (Jan 8, 2026):
+
+| Requirement | meta-ads-mcp | meta-mcp-compare |
+|-------------|--------------|------------------|
+| Lead gen tools | ✅ Unique | ❌ Missing |
+| Pixel tracking | ✅ Unique | ❌ Missing |
+| Async jobs for large exports | ✅ Built-in | ❌ Missing |
+| HTTP transport (for token routing) | ✅ X-META-ACCESS-TOKEN header | ❌ stdio only |
+| Rate limiter | ❌ Must port (~200 lines) | ✅ Built-in |
+| Modular architecture | ✅ Easier to extend | ⚠️ More monolithic |
+
+**Conclusion:** Start with meta-ads-mcp and port the rate limiter from meta-mcp-compare. The unique capabilities (leads, pixels, async jobs) would take significantly longer to rebuild than porting the rate limiter.
