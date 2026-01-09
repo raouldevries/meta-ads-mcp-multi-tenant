@@ -6,7 +6,7 @@ import os
 import sys
 import webbrowser
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from .auth import login as login_auth
 from .resources import list_resources, get_resource
 from .utils import logger
