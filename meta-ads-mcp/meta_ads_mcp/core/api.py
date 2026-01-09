@@ -1,13 +1,12 @@
 """Core API functionality for Meta Ads API."""
 
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, Optional
 import json
 import httpx
-import asyncio
 import functools
 import os
 from . import auth
-from .auth import needs_authentication, auth_manager, start_callback_server, shutdown_callback_server
+from .auth import auth_manager
 from .utils import logger
 from .retry import MetaApiError, parse_meta_error, with_retry
 
