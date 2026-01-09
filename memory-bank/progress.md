@@ -320,7 +320,7 @@ Implemented a production-grade retry mechanism with exponential backoff for hand
 
 | Commit | Description |
 |--------|-------------|
-| `TBD` | Add centralized retry/backoff mechanism (Step 1.1) |
+| `07377c4` | Add centralized retry/backoff mechanism (Step 1.1) |
 | `4f5aa5e` | Add extended Meta API coverage with read-only tools |
 | `512b81b` | Add CLAUDE.md to gitignore |
 | `abd8599` | Add video completion metrics and scalable architecture plan |
