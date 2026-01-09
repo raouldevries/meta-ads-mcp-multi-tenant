@@ -767,6 +767,59 @@ Added a validation helper to check creative fields, CTA values, and image URL ac
 
 ---
 
+### Audit Updates: Improvement Plan ✅
+
+**Completed:** 2026-01-09
+
+Recorded audit findings and an audit-fix checklist in the improvement plan.
+
+#### Files Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `memory-bank/improvement-plan.md` | Modified | Added audit findings section and checklist of required fixes |
+
+---
+
+### Systematic Audit of Improvement Plan ✅
+
+**Completed:** 2026-01-09
+
+Performed comprehensive audit of all improvement plan steps, verified implementations against specifications, and fixed identified issues.
+
+#### Audit Summary
+
+| Step | Status | Issues Found | Resolution |
+|------|--------|--------------|------------|
+| 1.1.1 | ✅ Verified | None | N/A |
+| 1.1.2 | ✅ Verified | None | N/A |
+| 1.1.3 | 🐛 Bug Fixed | `http_status` attribute error | Changed to `status_code` |
+| 1.1.4 | ✅ Verified | None | N/A |
+| 1.2.x | ✅ Verified | None | N/A |
+| 1.3.x | ✅ Verified | None | N/A |
+| 1.4.x | ✅ Verified | None | N/A |
+| 2.1.1 | ✅ Verified | None | N/A |
+| 2.2.x | ✅ Verified | None | N/A |
+| 2.3.x | ✅ Verified | None | N/A |
+| 2.4.x | ✅ Verified | None | N/A |
+| 3.1.x | ✅ Verified | None | N/A |
+| 3.2.x | ✅ Verified | None | N/A |
+
+#### Critical Bug Fixed
+
+**File:** `meta_ads_mcp/core/api.py`
+**Issue:** Lines 190 and 211 referenced `e.http_status` but `MetaApiError` class defines `status_code`
+**Impact:** Would cause `AttributeError` when handling auth errors (401/403)
+**Fix:** Changed `e.http_status` → `e.status_code` in both locations
+
+#### Verification
+
+- All 348+ tests pass after fix
+- No regressions introduced
+- Bug would have caused runtime errors in error handling path
+
+---
+
 ## Git History
 
 | Commit | Description |

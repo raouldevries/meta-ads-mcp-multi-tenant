@@ -187,7 +187,7 @@ async def make_api_request(
         if e.error_code in [190, 102]:
             logger.warning(f"Auth error detected (code: {e.error_code}). Invalidating token.")
             auth_manager.invalidate_token()
-        elif e.http_status in [401, 403]:
+        elif e.status_code in [401, 403]:
             logger.warning("Detected authentication error (401/403)")
             auth_manager.invalidate_token()
         elif e.error_code == 200 and "Provide valid app ID" in (e.message or ""):
@@ -208,7 +208,7 @@ async def make_api_request(
                 "code": e.error_code,
                 "error_subcode": e.error_subcode,
                 "error_type": e.error_type,
-                "http_status": e.http_status,
+                "http_status": e.status_code,
                 "is_transient": e.is_retryable,
                 "fbtrace_id": e.fbtrace_id
             }
