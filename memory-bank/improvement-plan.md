@@ -2033,6 +2033,17 @@ async def validate_creative_specs(
 - [x] 3.2 Creative Validation Helpers
   - [x] 3.2.1 Create validate_creative_specs tool
 
+### Audit Fixes (Post-Implementation)
+- [ ] 1.1.1 Cap retry attempts and honor `Retry-After` headers
+- [ ] 1.1.3 Retry on retryable HTTP status codes and network errors
+- [ ] 1.2.1 Health check: use `httpx`, configurable API version, and app token for `debug_token`
+- [ ] 1.2.2 Health check test: decide unit vs e2e and update accordingly
+- [ ] 1.4.1 Pagination helpers: use `httpx`/shared auth with timeouts
+- [ ] 1.4.2 `fetch_all` handling: define URL/token and return `pagination_info`
+- [ ] 1.4.3 Add pagination tests for `fetch_all_pages`/`paginate_generator`
+- [ ] 2.1.1 Token tools: use `httpx`, version helpers, and app token for `debug_token`
+- [ ] 3.2.1 Creative validation: use `httpx` with timeout and `HEAD` fallback
+
 ---
 
 ## Step Summary
