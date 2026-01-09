@@ -99,6 +99,42 @@ Tests use pytest markers defined in `pyproject.toml`:
 - Budgets are specified in cents (e.g., 10000 = $100.00)
 - Ad account IDs must include the `act_` prefix
 
+## Performance Queries Best Practices
+
+When a user asks performance-related questions about campaigns, ad sets, or ads, **always filter to items with actual ad spend** within the selected period. This is the default behavior for performance analysis.
+
+### Using the `only_with_spend` Parameter
+
+The following tools support `only_with_spend=True` and `time_range` parameters:
+- `get_campaigns(account_id, time_range="last_30d", only_with_spend=True)`
+- `get_adsets(account_id, time_range="last_30d", only_with_spend=True)`
+- `get_ads(account_id, time_range="last_30d", only_with_spend=True)`
+
+### Time Range Options
+
+Use preset strings or custom date ranges:
+- Presets: `today`, `yesterday`, `last_7d`, `last_14d`, `last_30d`, `last_90d`, `this_month`, `last_month`, `this_quarter`, `last_quarter`
+- Custom: `{"since": "2024-01-01", "until": "2024-01-31"}`
+
+### Analysis Tools
+
+For more detailed performance analysis, use the dedicated analysis tools:
+- `get_active_ads_analysis(account_id, time_range, performance_metric)` - Segments ads into top/middle/bottom performers
+- `get_campaign_performance_summary(account_id, time_range)` - Campaign-level aggregated metrics
+
+### Example Usage
+
+```python
+# Get only campaigns that had spend in the last 30 days
+get_campaigns(account_id="act_123456789", time_range="last_30d", only_with_spend=True)
+
+# Get ads with spend, filtered by campaign
+get_ads(account_id="act_123456789", campaign_id="123", time_range="last_7d", only_with_spend=True)
+
+# Analyze top and bottom performing ads by CTR
+get_active_ads_analysis(account_id="act_123456789", time_range="last_30d", performance_metric="ctr")
+```
+
 ## Custom Commands
 
 - **"Big Tony"** or **"call Tony"**: Run `/big-tony` to review and fix code issues
