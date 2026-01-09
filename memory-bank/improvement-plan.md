@@ -251,6 +251,12 @@ python -c "from meta_ads_mcp.core.retry import with_retry, RetryConfig; print('R
 - Update `with_retry` to cap retries with `min(max_retries, e.max_retries)` and use that for attempt comparisons/logs.
 - Extend `parse_meta_error` to accept response headers and honor `Retry-After` from headers.
 
+**Audit Notes (2026-01-09):**
+- ✅ Verified: `retry.py` exists with complete implementation
+- ✅ Verified: `with_retry` caps retries correctly at line 265: `effective_max_retries = min(max_retries, e.max_retries)`
+- ✅ Verified: `parse_meta_error` extracts Retry-After from error.headers (lines 209-219)
+- ✅ No issues found
+
 ---
 
 #### Step 1.1.2: Add retry module to core exports
@@ -269,6 +275,10 @@ from .retry import with_retry, RetryConfig, MetaApiError, parse_meta_error
 ```bash
 python -c "from meta_ads_mcp.core import with_retry; print('Export successful')"
 ```
+
+**Audit Notes (2026-01-09):**
+- ✅ Verified: `__init__.py` correctly exports: `with_retry`, `RetryConfig`, `MetaApiError`, `parse_meta_error`, `retry_with_backoff`
+- ✅ No issues found
 
 ---
 
@@ -317,6 +327,13 @@ python -m pytest tests/test_api.py -v -k "retry" 2>/dev/null || echo "Add retry 
 - Raise `MetaApiError` for retryable HTTP status codes even when response bodies lack `"error"`.
 - Wrap network/timeout exceptions into retryable errors.
 - Pass response headers into `parse_meta_error` so `Retry-After` is honored.
+
+**Audit Notes (2026-01-09):**
+- ✅ Verified: Retry decorator applied to `_execute_api_request`
+- 🐛 **Bug Found & Fixed:** Lines 190 and 211 referenced `e.http_status` but `MetaApiError` defines `status_code`
+  - Changed `e.http_status` → `e.status_code` in both locations
+  - Would have caused `AttributeError` during auth error handling (401/403)
+- ✅ All 348+ tests pass after fix
 
 ---
 
@@ -2097,3 +2114,39 @@ async def validate_creative_specs(
 
 ### Verification Notes
 Verified steps: 1.1.2, 1.1.4, 1.3.1, 1.3.2, 1.3.3, 2.2.1, 2.3.1, 2.3.2, 2.4.1, 3.1.1.
+
+---
+
+## Audit Resolution (2026-01-09)
+
+### Systematic Audit Completed
+
+All 19 improvement plan steps across Tiers 1-3 were systematically verified against their specifications.
+
+### Bug Fixed
+
+| Step | Issue | Resolution |
+|------|-------|------------|
+| 1.1.3 | `api.py` lines 190, 211 referenced `e.http_status` but `MetaApiError` defines `status_code` | Changed `e.http_status` → `e.status_code` |
+
+### Audit Summary by Tier
+
+| Tier | Steps | Status |
+|------|-------|--------|
+| Tier 1 | 1.1.1, 1.1.2, 1.1.3, 1.1.4, 1.2.x, 1.3.x, 1.4.x | ✅ All verified (1.1.3 bug fixed) |
+| Tier 2 | 2.1.1, 2.2.x, 2.3.x, 2.4.x | ✅ All verified |
+| Tier 3 | 3.1.x, 3.2.x | ✅ All verified |
+
+### Notes on Pre-existing Audit Findings
+
+The "Issues Requiring Action" section above documents concerns from a prior review. The current audit verified:
+
+1. **Step 1.1.1**: Already correctly implemented - `with_retry` caps retries at line 265, `parse_meta_error` handles Retry-After
+2. **Step 1.2.1, 1.4.x, 2.1.1, 3.2.1**: Use standalone `httpx` calls (not `aiohttp`), consistent with codebase patterns
+3. **Step 1.4.3**: Comprehensive tests exist in `test_pagination.py` (31 tests)
+
+### Test Results
+
+- 348+ tests passing after bug fix
+- No regressions introduced
+- Commit: `f8d1016` - "Audit improvement plan: Fix critical http_status attribute bug"
