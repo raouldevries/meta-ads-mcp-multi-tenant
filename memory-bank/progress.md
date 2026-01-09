@@ -850,10 +850,88 @@ All filtered responses now include a message:
 
 ---
 
+### Headline Performance Analysis Tool (2026-01-09)
+
+**Completed:** 2026-01-09
+
+Added a new tool `get_headline_performance` to analyze ad copy performance across all ads, including flexible ad (Advantage+ Creative) headline variants.
+
+#### Files Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/analysis.py` | Modified | Added `get_headline_performance` tool |
+
+#### Problem Solved
+
+The existing analysis tools couldn't extract headlines from Advantage+ Creative (flexible) ads because:
+- Flexible ad headlines are stored in `asset_feed_spec.titles`, not the standard `title` field
+- The nested query `/{ad_id}?fields=creative{asset_feed_spec}` doesn't return the full data
+- Needed to use the `/adcreatives` endpoint to get complete creative data
+
+#### Key Features
+
+**get_headline_performance tool:**
+- Extracts all creative text elements from both flexible and standard ads
+- Headlines: `asset_feed_spec.titles` (flexible) or `object_story_spec.link_data.name` (standard)
+- Primary texts: `asset_feed_spec.bodies` (flexible) or `object_story_spec.link_data.message` (standard)
+- Descriptions: `asset_feed_spec.descriptions` (flexible) or `object_story_spec.link_data.description` (standard)
+- Returns performance metrics (CTR, CPC, spend, impressions) alongside each headline
+- Sorts by worst performers first (default) to find problem headlines
+- Provides summary statistics including content coverage counts
+
+#### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `account_id` | required | Meta Ads account ID (act_XXXXXXXXX) |
+| `time_range` | `last_30d` | Time range preset or custom date range |
+| `min_impressions` | 100 | Minimum impressions threshold |
+| `min_spend` | 1.0 | Minimum spend threshold |
+| `sort_by` | `ctr` | Metric to sort by (ctr, cpc, spend, impressions) |
+| `sort_order` | `asc` | Sort order (asc = worst first) |
+| `limit` | 50 | Maximum ads to return |
+
+#### Response Format
+
+```json
+{
+  "summary": {
+    "total_ads_analyzed": 94,
+    "content_coverage": {
+      "ads_with_headlines": 85,
+      "ads_with_primary_texts": 72,
+      "ads_with_descriptions": 45,
+      "ads_without_headlines": 9
+    },
+    "headline_sources": {
+      "flexible_ad": 45,
+      "standard_ad": 40,
+      "none": 9
+    }
+  },
+  "ads": [
+    {
+      "ad_id": "120237045902150619",
+      "ad_name": "Video ad - Member – Aan 't IJ",
+      "ctr": 0.145,
+      "spend": 319.48,
+      "headlines": ["Sauna with a relaxing view", "75 minutes, a clear mind", ...],
+      "primary_texts": ["Escape doesn't need a plane ticket...", ...],
+      "descriptions": ["Win a trip to the Lofoten!"],
+      "headline_source": "flexible_ad"
+    }
+  ]
+}
+```
+
+---
+
 ## Git History
 
 | Commit | Description |
 |--------|-------------|
+| `edf734f` | Add get_headline_performance tool for ad copy analysis |
 | `65dff3d` | Change only_with_spend default to True for all Meta API query tools |
 | `3f19f6b` | Simplify retry module code for clarity (bug fixes + cleanup) |
 | `0332605` | Complete Step 1.1: Integrate retry into API client with tests |
