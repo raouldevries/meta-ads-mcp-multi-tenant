@@ -83,12 +83,13 @@ class TestInsightsActionsAndValues:
     
     @pytest.mark.asyncio
     async def test_actions_and_action_values_included_in_fields(self, mock_api_request, mock_auth_manager, valid_campaign_id):
-        """Test that actions and action_values are included in the fields parameter"""
-        
+        """Test that actions and action_values are included in the fields parameter when using conversions preset"""
+
         result = await get_insights(
             object_id=valid_campaign_id,
             time_range="last_30d",
-            level="campaign"
+            level="campaign",
+            field_preset="conversions"
         )
         
         # Parse the result
@@ -326,12 +327,13 @@ class TestInsightsActionsAndValues:
     
     @pytest.mark.asyncio
     async def test_actions_fields_completeness(self, mock_api_request, mock_auth_manager, valid_campaign_id):
-        """Test that all required fields are included in the request"""
-        
+        """Test that all required fields are included when using full preset"""
+
         result = await get_insights(
             object_id=valid_campaign_id,
             time_range="last_30d",
-            level="campaign"
+            level="campaign",
+            field_preset="full"
         )
         
         # Verify the API was called with correct parameters
@@ -342,13 +344,13 @@ class TestInsightsActionsAndValues:
         params = call_args[0][2]
         fields = params['fields']
         
-        # Required fields for actions and action_values
+        # Required fields for full preset (matches presets.py INSIGHT_PRESETS["full"])
         required_fields = [
             'account_id', 'account_name', 'campaign_id', 'campaign_name',
             'adset_id', 'adset_name', 'ad_id', 'ad_name',
             'impressions', 'clicks', 'spend', 'cpc', 'cpm', 'ctr',
             'reach', 'frequency', 'actions', 'action_values', 'conversions',
-            'unique_clicks', 'cost_per_action_type'
+            'cost_per_action_type'
         ]
         
         for field in required_fields:
