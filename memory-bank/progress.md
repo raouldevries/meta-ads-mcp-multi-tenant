@@ -715,6 +715,32 @@ Added a discovery tool to list available MCP tools, presets, and defaults for qu
 
 ---
 
+### Step 3.1: Export to CSV/JSON ✅
+
+**Completed:** 2026-01-09
+
+Added an export helper for insights data to output CSV or JSON for downstream analysis.
+
+#### Files Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/insights.py` | Modified | Added `export_insights` tool for CSV/JSON exports |
+
+#### Key Features
+
+**export_insights tool:**
+- Supports JSON or CSV output
+- Uses existing `get_insights` with presets and limits
+- Returns compact CSV with flattened fields
+- Preserves JSON structure for programmatic use
+
+#### Audit
+
+`py_compile` on `meta_ads_mcp/core/insights.py` via venv python (no errors).
+
+---
+
 ## Git History
 
 | Commit | Description |

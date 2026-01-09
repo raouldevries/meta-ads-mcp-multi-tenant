@@ -1,5 +1,7 @@
 """Insights and Reporting functionality for Meta Ads API."""
 
+import csv
+import io
 import json
 from typing import Optional, Union, Dict, List
 from .api import meta_api_tool, make_api_request
@@ -490,6 +492,84 @@ async def compare_entities(
         "entities": results,
         "rankings": rankings,
         "averages": {key: round(value, 2) for key, value in averages.items()}
+    }, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def export_insights(
+    object_id: str,
+    format: str = "json",
+    time_range: Union[str, Dict[str, str]] = "last_30d",
+    level: str = "ad",
+    field_preset: str = "efficiency",
+    limit: int = 100,
+    access_token: Optional[str] = None
+) -> str:
+    """
+    Export insights data in CSV or JSON format.
+
+    Args:
+        object_id: Account, campaign, ad set, or ad ID
+        format: Output format - "json" or "csv" (default: json)
+        time_range: Time period (default: last_30d)
+        level: Aggregation level (default: ad)
+        field_preset: Field preset to use (default: efficiency)
+        limit: Maximum rows (default: 100)
+
+    Returns:
+        Formatted data string (CSV or JSON)
+
+    Note:
+        CSV format is more compact but loses nested structure.
+        Use JSON for programmatic processing.
+    """
+    if not object_id:
+        return json.dumps({"error": "No object ID provided"}, indent=2)
+
+    result = await get_insights(
+        object_id=object_id,
+        time_range=time_range,
+        level=level,
+        field_preset=field_preset,
+        limit=limit,
+        access_token=access_token
+    )
+
+    data = json.loads(result)
+    if "error" in data:
+        return result
+
+    if format.lower() == "csv":
+        rows = data.get("data", [])
+        if not rows:
+            return "No data to export"
+
+        output = io.StringIO()
+        all_keys = set()
+        for row in rows:
+            all_keys.update(row.keys())
+
+        simple_keys = []
+        for key in sorted(all_keys):
+            if not isinstance(rows[0].get(key), (dict, list)):
+                simple_keys.append(key)
+
+        writer = csv.DictWriter(output, fieldnames=simple_keys, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+        csv_content = output.getvalue()
+        return f"# Exported {len(rows)} rows\n# Time range: {time_range}\n\n{csv_content}"
+
+    return json.dumps({
+        "export": {
+            "format": "json",
+            "time_range": time_range,
+            "level": level,
+            "row_count": len(data.get("data", []))
+        },
+        "data": data.get("data", [])
     }, indent=2)
 
 
