@@ -1,6 +1,7 @@
 """Ad and Creative-related functionality for Meta Ads API."""
 
 import json
+import httpx
 from typing import Optional, Dict, Any, List
 import io
 from PIL import Image as PILImage
@@ -228,6 +229,112 @@ async def get_creative_previews(
 
     data = await make_api_request(endpoint, access_token, params)
     return json.dumps(data, indent=2)
+
+
+@mcp_server.tool()
+async def validate_creative_specs(
+    headline: Optional[str] = None,
+    primary_text: Optional[str] = None,
+    description: Optional[str] = None,
+    image_url: Optional[str] = None,
+    call_to_action: Optional[str] = None
+) -> str:
+    """
+    Validate creative specifications against Meta best practices.
+
+    Checks:
+    - Character limits for text fields
+    - Valid call-to-action types
+    - Image URL accessibility (if provided)
+
+    Args:
+        headline: Ad headline text
+        primary_text: Main ad copy
+        description: Link description
+        image_url: URL to ad image
+        call_to_action: CTA button type
+
+    Returns:
+        JSON with validation results and recommendations
+    """
+    issues = []
+    warnings = []
+    recommendations = []
+
+    limits = {
+        "headline": {"max": 40, "recommended": 25},
+        "primary_text": {"max": 125, "recommended": 80},
+        "description": {"max": 30, "recommended": 20}
+    }
+
+    if headline:
+        headline_length = len(headline)
+        if headline_length > limits["headline"]["max"]:
+            issues.append(f"Headline exceeds {limits['headline']['max']} chars (has {headline_length})")
+        elif headline_length > limits["headline"]["recommended"]:
+            warnings.append(
+                f"Headline over {limits['headline']['recommended']} chars may be truncated on mobile"
+            )
+
+    if primary_text:
+        primary_text_length = len(primary_text)
+        if primary_text_length > limits["primary_text"]["max"]:
+            warnings.append(
+                f"Primary text over {limits['primary_text']['max']} chars will be truncated"
+            )
+        elif primary_text_length > limits["primary_text"]["recommended"]:
+            recommendations.append("Consider shorter primary text for better engagement")
+
+    if description:
+        description_length = len(description)
+        if description_length > limits["description"]["max"]:
+            issues.append(f"Description exceeds {limits['description']['max']} chars")
+
+    valid_ctas = [
+        "BOOK_TRAVEL", "CONTACT_US", "DOWNLOAD", "GET_OFFER",
+        "GET_QUOTE", "LEARN_MORE", "LISTEN_NOW", "MESSAGE_PAGE",
+        "NO_BUTTON", "OPEN_LINK", "ORDER_NOW", "PLAY_GAME",
+        "SHOP_NOW", "SIGN_UP", "SUBSCRIBE", "WATCH_MORE"
+    ]
+
+    if call_to_action:
+        call_to_action_value = call_to_action.upper()
+        if call_to_action_value not in valid_ctas:
+            issues.append(
+                f"Invalid CTA '{call_to_action}'. Valid: {', '.join(valid_ctas[:5])}..."
+            )
+
+    if image_url:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.head(image_url, timeout=5)
+            if response.status_code != 200:
+                issues.append(f"Image URL returned status {response.status_code}")
+            content_type = response.headers.get("Content-Type", "")
+            if not content_type.startswith("image/"):
+                warnings.append(f"URL content-type is '{content_type}', expected image/*")
+        except Exception as error:
+            issues.append(f"Could not verify image URL: {str(error)}")
+
+    if issues:
+        status = "invalid"
+    elif warnings:
+        status = "valid_with_warnings"
+    else:
+        status = "valid"
+
+    return json.dumps({
+        "status": status,
+        "issues": issues,
+        "warnings": warnings,
+        "recommendations": recommendations,
+        "character_counts": {
+            "headline": len(headline) if headline else 0,
+            "primary_text": len(primary_text) if primary_text else 0,
+            "description": len(description) if description else 0
+        },
+        "limits": limits
+    }, indent=2)
 
 
 @mcp_server.tool()
@@ -1654,7 +1761,6 @@ async def get_account_pages(account_id: str, access_token: Optional[str] = None)
             "error": "Failed to get account pages",
             "details": str(e)
         }, indent=2)
-
 
 
 

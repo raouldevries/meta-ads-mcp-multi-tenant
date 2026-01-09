@@ -741,6 +741,32 @@ Added an export helper for insights data to output CSV or JSON for downstream an
 
 ---
 
+### Step 3.2: Creative Validation Helpers ✅
+
+**Completed:** 2026-01-09
+
+Added a validation helper to check creative fields, CTA values, and image URL accessibility before submission.
+
+#### Files Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/ads.py` | Modified | Added `validate_creative_specs` tool for creative checks |
+
+#### Key Features
+
+**validate_creative_specs tool:**
+- Validates headline, primary text, and description length limits
+- Checks CTA type against known Meta values
+- Verifies image URL status and content-type
+- Returns status, issues, warnings, and recommendations
+
+#### Audit
+
+`py_compile` on `meta_ads_mcp/core/ads.py` via venv python (no errors).
+
+---
+
 ## Git History
 
 | Commit | Description |
