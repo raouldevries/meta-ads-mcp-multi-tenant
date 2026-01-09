@@ -27,6 +27,7 @@ from .openai_deep_research import search, fetch  # OpenAI MCP Deep Research tool
 from . import audiences  # Custom Audiences, Saved Audiences, Lookalike Audiences
 from . import pixels  # Meta Pixel management, custom conversions
 from . import leads  # Lead forms and lead retrieval (requires leads_retrieval permission)
+from . import analysis  # Analysis tools optimized for Claude context window
 
 __all__ = [
     'mcp_server',
