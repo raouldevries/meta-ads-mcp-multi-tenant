@@ -820,10 +820,41 @@ Performed comprehensive audit of all improvement plan steps, verified implementa
 
 ---
 
+### Only With Spend Filter Default Change (2026-01-09)
+
+**Completed:** 2026-01-09
+
+Changed the default value of `only_with_spend` parameter from `False` to `True` in all Meta API query tools. This ensures users only see data for items with actual ad spend in the selected period by default.
+
+#### Files Modified
+
+| File | Functions Updated |
+|------|-------------------|
+| `meta_ads_mcp/core/campaigns.py` | `get_campaigns` |
+| `meta_ads_mcp/core/adsets.py` | `get_adsets` |
+| `meta_ads_mcp/core/ads.py` | `get_ads` |
+| `meta_ads_mcp/core/insights.py` | `get_insights`, `get_insights_by_time`, `get_insights_with_actions`, `get_video_insights`, `get_demographic_insights`, `get_placement_insights`, `get_device_insights` |
+
+#### Behavior Change
+
+| Before | After |
+|--------|-------|
+| `only_with_spend=False` (default) | `only_with_spend=True` (default) |
+| Returns all items regardless of spend | Returns only items with spend > 0 |
+| User must opt-in to filter by spend | User must opt-out to see all items |
+
+#### User Message
+
+All filtered responses now include a message:
+> "Showing X items with ad spend in the selected period. Set only_with_spend=False to include all Y items."
+
+---
+
 ## Git History
 
 | Commit | Description |
 |--------|-------------|
+| `65dff3d` | Change only_with_spend default to True for all Meta API query tools |
 | `3f19f6b` | Simplify retry module code for clarity (bug fixes + cleanup) |
 | `0332605` | Complete Step 1.1: Integrate retry into API client with tests |
 | `07377c4` | Add centralized retry/backoff mechanism (Step 1.1) |
