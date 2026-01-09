@@ -20,7 +20,7 @@ ENABLE_SAVE_AD_IMAGE_LOCALLY = bool(os.environ.get("META_ADS_ENABLE_SAVE_AD_IMAG
 
 @mcp_server.tool()
 @meta_api_tool
-async def get_ads(account_id: str, access_token: Optional[str] = None, limit: int = 10, 
+async def get_ads(account_id: str, access_token: Optional[str] = None, limit: int = 50,
                  campaign_id: str = "", adset_id: str = "") -> str:
     """
     Get ads for a Meta Ads account with optional filtering.
@@ -28,7 +28,7 @@ async def get_ads(account_id: str, access_token: Optional[str] = None, limit: in
     Args:
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         access_token: Meta API access token (optional - will use cached token if not provided)
-        limit: Maximum number of ads to return (default: 10)
+        limit: Maximum number of ads to return (default: 50)
         campaign_id: Optional campaign ID to filter by
         adset_id: Optional ad set ID to filter by
     """

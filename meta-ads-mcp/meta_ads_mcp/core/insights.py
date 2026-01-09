@@ -57,7 +57,7 @@ async def get_insights(
     breakdown: str = "",
     action_breakdowns: Optional[List[str]] = None,
     level: str = "ad",
-    limit: int = 25,
+    limit: int = 50,
     after: str = "",
     field_preset: str = "",
     action_attribution_windows: Optional[List[str]] = None,
@@ -295,7 +295,7 @@ async def get_insights_with_actions(
     access_token: Optional[str] = None,
     time_range: Union[str, Dict[str, str]] = "last_30d",
     level: str = "ad",
-    limit: int = 25
+    limit: int = 50
 ) -> str:
     """
     Get insights with detailed action breakdowns.
@@ -636,7 +636,7 @@ async def get_video_insights(
     access_token: Optional[str] = None,
     time_range: Union[str, Dict[str, str]] = "last_30d",
     level: str = "ad",
-    limit: int = 25
+    limit: int = 50
 ) -> str:
     """
     Get video-specific performance insights.

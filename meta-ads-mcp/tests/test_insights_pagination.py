@@ -135,7 +135,7 @@ class TestInsightsPagination:
 
     @pytest.mark.asyncio
     async def test_insights_default_limit(self, mock_auth_manager, valid_account_id, mock_paginated_response_page1):
-        """Test that default limit is 25 when not specified"""
+        """Test that default limit is 50 when not specified (optimized for large dataset analysis)"""
         with patch('meta_ads_mcp.core.insights.make_api_request', new_callable=AsyncMock) as mock_api_request:
             mock_api_request.return_value = mock_paginated_response_page1
 
@@ -147,9 +147,9 @@ class TestInsightsPagination:
             # Verify the API was called with default limit
             mock_api_request.assert_called_once()
             call_args = mock_api_request.call_args
-            
+
             params = call_args[0][2]
-            assert params["limit"] == 25  # Default value
+            assert params["limit"] == 50  # Default value (increased for large dataset analysis)
 
     @pytest.mark.asyncio
     async def test_insights_without_after_cursor(self, mock_auth_manager, valid_account_id, mock_paginated_response_page1):

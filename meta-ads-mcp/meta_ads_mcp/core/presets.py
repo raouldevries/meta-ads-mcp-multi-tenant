@@ -61,10 +61,13 @@ CAMPAIGN_PRESETS: Dict[str, List[str]] = {
 }
 
 # Default limits for different contexts
+# Optimized for Claude's 200K token context window
+# A typical ad object is ~500 tokens, campaign ~300 tokens
 DEFAULT_LIMITS = {
-    "claude_desktop": 25,
-    "claude_code": 100,
-    "api_max": 500
+    "claude_desktop": 50,      # Conservative for chat interface
+    "claude_code": 200,        # More generous for code/analysis
+    "analysis": 500,           # For large dataset analysis workflows
+    "api_max": 1000            # Maximum for API users
 }
 
 # Default time ranges

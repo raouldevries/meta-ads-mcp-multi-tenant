@@ -9,7 +9,7 @@ from .server import mcp_server
 
 @mcp_server.tool()
 @meta_api_tool
-async def get_adsets(account_id: str, access_token: Optional[str] = None, limit: int = 10, campaign_id: str = "") -> str:
+async def get_adsets(account_id: str, access_token: Optional[str] = None, limit: int = 50, campaign_id: str = "") -> str:
     """
     Get ad sets for a Meta Ads account with optional filtering by campaign.
     
