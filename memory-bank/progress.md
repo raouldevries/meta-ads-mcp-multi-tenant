@@ -609,6 +609,55 @@ Or on error:
 
 ---
 
+### Step 2.2: Compare Entities Helper ✅
+
+**Completed:** 2026-01-09
+
+Implemented a comparison tool for campaigns, ad sets, or ads to provide side-by-side metrics, rankings, and deltas.
+
+#### Files Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/insights.py` | Modified | Added `compare_entities` tool for multi-entity performance comparison |
+
+#### Key Features
+
+**compare_entities tool:**
+- Compares up to 10 entities for a given time range
+- Returns metrics per entity plus rankings and averages
+- Calculates deltas from average for numeric metrics
+- Handles API errors and missing data per entity
+
+#### Response Format
+
+```json
+{
+  "comparison": {
+    "entity_type": "campaign",
+    "time_range": "last_30d",
+    "metrics": ["spend", "impressions", "clicks"],
+    "entity_count": 3
+  },
+  "entities": [
+    {
+      "id": "123",
+      "name": "Campaign A",
+      "metrics": {"spend": "123.45", "impressions": "1000", "clicks": "50"},
+      "delta_from_avg": {"spend": "+5.2%"}
+    }
+  ],
+  "rankings": {"spend": {"best": "123", "worst": "456", "ranking": ["123", "456", "789"]}},
+  "averages": {"spend": 115.23}
+}
+```
+
+#### Test Results
+
+Audit: `py_compile` on `meta_ads_mcp/core/insights.py` via venv python (no errors).
+
+---
+
 ## Git History
 
 | Commit | Description |

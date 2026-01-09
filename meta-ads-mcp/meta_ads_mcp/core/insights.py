@@ -338,6 +338,157 @@ async def get_insights_with_actions(
 
 @mcp_server.tool()
 @meta_api_tool
+async def compare_entities(
+    entity_type: str,
+    entity_ids: List[str],
+    time_range: Union[str, Dict[str, str]] = "last_7d",
+    metrics: Optional[List[str]] = None,
+    access_token: Optional[str] = None
+) -> str:
+    """
+    Compare performance metrics across multiple campaigns, ad sets, or ads.
+
+    Args:
+        entity_type: Type of entity (campaign, adset, ad)
+        entity_ids: List of IDs to compare (max 10)
+        time_range: Time period for comparison (default: last_7d)
+        metrics: Metrics to compare (default: spend, impressions, clicks, ctr, cpc)
+
+    Returns:
+        JSON with side-by-side comparison and rankings
+
+    Example:
+        compare_entities(
+            entity_type="campaign",
+            entity_ids=["123", "456", "789"],
+            time_range="last_30d"
+        )
+    """
+    if entity_type not in {"campaign", "adset", "ad"}:
+        return json.dumps({"error": "entity_type must be campaign, adset, or ad"}, indent=2)
+
+    if not entity_ids:
+        return json.dumps({"error": "No entity IDs provided"}, indent=2)
+
+    if len(entity_ids) > 10:
+        return json.dumps({
+            "error": "Maximum 10 entities can be compared at once",
+            "provided": len(entity_ids)
+        }, indent=2)
+
+    if not metrics:
+        metrics = [
+            "spend", "impressions", "reach", "clicks",
+            "ctr", "cpc", "cpm", "frequency"
+        ]
+
+    results = []
+    name_key = f"{entity_type}_name"
+
+    for entity_id in entity_ids:
+        try:
+            insight_result = await get_insights(
+                object_id=entity_id,
+                time_range=time_range,
+                level=entity_type,
+                limit=1,
+                access_token=access_token
+            )
+            insight_data = json.loads(insight_result)
+            if "error" in insight_data:
+                error_data = insight_data["error"]
+                error_message = error_data.get("message", "Unknown error") if isinstance(error_data, dict) else str(error_data)
+                results.append({
+                    "id": entity_id,
+                    "name": entity_id,
+                    "error": error_message
+                })
+                continue
+
+            data = insight_data.get("data", [])
+            if not data:
+                results.append({
+                    "id": entity_id,
+                    "name": entity_id,
+                    "error": "No data available"
+                })
+                continue
+
+            entity_data = data[0]
+            results.append({
+                "id": entity_id,
+                "name": entity_data.get(name_key, entity_id),
+                "metrics": {metric: entity_data.get(metric, "N/A") for metric in metrics}
+            })
+
+        except Exception as error:
+            results.append({
+                "id": entity_id,
+                "error": str(error)
+            })
+
+    def parse_metric_value(value: Optional[object]) -> Optional[float]:
+        if value in (None, "N/A"):
+            return None
+        try:
+            return float(str(value).replace(",", ""))
+        except (ValueError, TypeError):
+            return None
+
+    rankings = {}
+    for metric in metrics:
+        values = []
+        for result in results:
+            metric_value = parse_metric_value(result.get("metrics", {}).get(metric))
+            if metric_value is not None:
+                values.append((result["id"], metric_value))
+
+        if values:
+            reverse = metric not in ["cpc", "cpm", "frequency"]
+            sorted_values = sorted(values, key=lambda item: item[1], reverse=reverse)
+            rankings[metric] = {
+                "best": sorted_values[0][0],
+                "worst": sorted_values[-1][0],
+                "ranking": [item[0] for item in sorted_values]
+            }
+
+    averages = {}
+    for metric in metrics:
+        values = []
+        for result in results:
+            metric_value = parse_metric_value(result.get("metrics", {}).get(metric))
+            if metric_value is not None:
+                values.append(metric_value)
+        if values:
+            averages[metric] = sum(values) / len(values)
+
+    for result in results:
+        if "metrics" not in result:
+            continue
+        result["delta_from_avg"] = {}
+        for metric in metrics:
+            metric_value = parse_metric_value(result["metrics"].get(metric))
+            average_value = averages.get(metric)
+            if metric_value is None or average_value in (None, 0):
+                continue
+            delta_pct = ((metric_value - average_value) / average_value) * 100
+            result["delta_from_avg"][metric] = f"{delta_pct:+.1f}%"
+
+    return json.dumps({
+        "comparison": {
+            "entity_type": entity_type,
+            "time_range": time_range,
+            "metrics": metrics,
+            "entity_count": len(results)
+        },
+        "entities": results,
+        "rankings": rankings,
+        "averages": {key: round(value, 2) for key, value in averages.items()}
+    }, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
 async def get_deleted_archived_insights(
     account_id: str,
     status: str = "ARCHIVED",
