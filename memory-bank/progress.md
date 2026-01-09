@@ -329,6 +329,7 @@ Implemented a production-grade retry mechanism with exponential backoff for hand
 
 | Commit | Description |
 |--------|-------------|
+| `3f19f6b` | Simplify retry module code for clarity (bug fixes + cleanup) |
 | `0332605` | Complete Step 1.1: Integrate retry into API client with tests |
 | `07377c4` | Add centralized retry/backoff mechanism (Step 1.1) |
 | `4f5aa5e` | Add extended Meta API coverage with read-only tools |
