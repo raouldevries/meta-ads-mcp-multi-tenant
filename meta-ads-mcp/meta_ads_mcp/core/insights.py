@@ -3,6 +3,7 @@
 import json
 from typing import Optional, Union, Dict, List
 from .api import meta_api_tool, make_api_request
+from .presets import get_insight_fields
 from .server import mcp_server
 
 
@@ -50,12 +51,13 @@ INSIGHT_FIELDS = [
 async def get_insights(
     object_id: str,
     access_token: Optional[str] = None,
-    time_range: Union[str, Dict[str, str]] = "maximum",
+    time_range: Union[str, Dict[str, str]] = "last_30d",
     breakdown: str = "",
     action_breakdowns: Optional[List[str]] = None,
     level: str = "ad",
     limit: int = 25,
     after: str = "",
+    field_preset: str = "",
     action_attribution_windows: Optional[List[str]] = None,
     time_increment: Optional[str] = None,
     filtering: Optional[List[Dict]] = None,
@@ -90,6 +92,7 @@ async def get_insights(
         level: Level of aggregation (ad, adset, campaign, account)
         limit: Maximum number of results to return per page (default: 25)
         after: Pagination cursor to get the next set of results
+        field_preset: Optional preset for fields (basic, efficiency, conversions, video, full)
         action_attribution_windows: Optional list of attribution windows (e.g., ["1d_click", "7d_click", "1d_view"])
         time_increment: Time increment for results. Values:
                        "1" - daily, "7" - weekly, "monthly" - monthly,
@@ -109,11 +112,14 @@ async def get_insights(
 
     endpoint = f"{object_id}/insights"
 
-    # Use custom fields or default comprehensive list
-    fields_to_request = fields if fields else INSIGHT_FIELDS
+    if fields:
+        fields_str = ",".join(fields)
+    else:
+        preset_name = field_preset if field_preset else "efficiency"
+        fields_str = get_insight_fields(preset_name)
 
     params = {
-        "fields": ",".join(fields_to_request),
+        "fields": fields_str,
         "level": level,
         "limit": limit,
         "use_unified_attribution_setting": "true" if use_unified_attribution_setting else "false"

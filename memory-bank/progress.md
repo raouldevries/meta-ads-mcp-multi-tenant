@@ -658,6 +658,37 @@ Audit: `py_compile` on `meta_ads_mcp/core/insights.py` via venv python (no error
 
 ---
 
+### Step 2.3: Default Limits & Presets ✅
+
+**Completed:** 2026-01-09
+
+Added field presets and default time range handling to keep insight responses concise and consistent.
+
+#### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/presets.py` | Created | Added field presets, default limits, and time range presets |
+| `meta_ads_mcp/core/insights.py` | Modified | Added `field_preset` support and defaulted to efficiency preset |
+
+#### Key Features
+
+**presets module:**
+- Insight presets: basic, efficiency, conversions, video, full
+- Campaign field presets: basic, full
+- Default limits and time range presets for common contexts
+
+**get_insights updates:**
+- Default `time_range` is now `last_30d`
+- `field_preset` parameter for preset fields
+- Custom `fields` overrides presets
+
+#### Audit
+
+`py_compile` on `meta_ads_mcp/core/presets.py` and `meta_ads_mcp/core/insights.py` via venv python (no errors).
+
+---
+
 ## Git History
 
 | Commit | Description |
