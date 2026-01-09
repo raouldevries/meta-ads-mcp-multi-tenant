@@ -6,6 +6,19 @@
 
 ---
 
+## Clarifications (User Decisions)
+
+| Setting | Decision |
+|---------|----------|
+| Complexity scoring | Weighted formula: `Σ(indent_level × count)` normalized to 1-10 scale |
+| Public functions | MCP tools (`@mcp.tool()`) + any non-underscore functions |
+| Conflict priority | Readability first - clarity over cleverness |
+| Checkpoints | Full stop - wait for explicit "proceed" |
+| Pre-check | All tests must pass before Phase 2 |
+| Commits | One commit per file |
+
+---
+
 ## Project Configuration
 
 ```yaml
