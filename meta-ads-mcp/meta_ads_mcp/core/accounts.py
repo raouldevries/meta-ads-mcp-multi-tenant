@@ -2,9 +2,10 @@
 
 import json
 import time
+import datetime
 import httpx
 from typing import Optional, Dict, Any
-from .api import meta_api_tool, make_api_request, META_GRAPH_API_BASE
+from .api import meta_api_tool, make_api_request, META_GRAPH_API_BASE, META_GRAPH_API_VERSION
 from .server import mcp_server
 from .auth import get_current_access_token
 
@@ -240,3 +241,133 @@ async def health_check(access_token: Optional[str] = None) -> str:
         result["status"] = "error"
         result["error"] = str(e)
         return json.dumps(result, indent=2)
+
+
+@mcp_server.tool()
+async def get_token_info(access_token: Optional[str] = None) -> str:
+    """
+    Get detailed information about the current access token.
+
+    Returns:
+        JSON with token details including:
+        - Token type (user, page, app)
+        - Associated app ID
+        - Granted permissions/scopes
+        - Expiration time
+        - User/page ID
+    """
+    token = access_token or await get_current_access_token()
+
+    if not token:
+        return json.dumps({
+            "error": "No access token configured",
+            "help": "Set META_ACCESS_TOKEN environment variable or configure OAuth"
+        })
+
+    try:
+        url = f"{META_GRAPH_API_BASE}/debug_token"
+        params = {
+            "input_token": token,
+            "access_token": token
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, params=params)
+            data = response.json()
+
+        if "error" in data:
+            return json.dumps({
+                "error": data["error"].get("message", "Unknown error"),
+                "error_code": data["error"].get("code")
+            })
+
+        token_data = data.get("data", {})
+
+        # Format expiration time
+        expires_at = token_data.get("expires_at", 0)
+        if expires_at == 0:
+            expiration = "Never (long-lived token)"
+        else:
+            exp_date = datetime.datetime.fromtimestamp(expires_at)
+            remaining = exp_date - datetime.datetime.now()
+            expiration = {
+                "timestamp": expires_at,
+                "date": exp_date.isoformat(),
+                "remaining_days": remaining.days,
+                "remaining_hours": remaining.seconds // 3600
+            }
+
+        return json.dumps({
+            "is_valid": token_data.get("is_valid", False),
+            "type": token_data.get("type", "unknown"),
+            "app_id": token_data.get("app_id"),
+            "user_id": token_data.get("user_id"),
+            "scopes": token_data.get("scopes", []),
+            "granular_scopes": token_data.get("granular_scopes", []),
+            "expiration": expiration,
+            "issued_at": token_data.get("issued_at"),
+            "profile_id": token_data.get("profile_id"),
+            "token_prefix": token[:20] + "..." if len(token) > 20 else token,
+            "api_version": META_GRAPH_API_VERSION
+        }, indent=2)
+
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+@mcp_server.tool()
+async def validate_token(access_token: Optional[str] = None) -> str:
+    """
+    Quick validation check for access token.
+
+    Returns simple pass/fail with actionable message.
+    """
+    token = access_token or await get_current_access_token()
+
+    if not token:
+        return json.dumps({
+            "valid": False,
+            "message": "No token configured",
+            "action": "Set META_ACCESS_TOKEN or run OAuth flow"
+        })
+
+    try:
+        # Quick test with minimal API call
+        url = f"{META_GRAPH_API_BASE}/me"
+        params = {"access_token": token, "fields": "id"}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, params=params)
+            data = response.json()
+
+        if "error" in data:
+            error = data["error"]
+            code = error.get("code", 0)
+
+            # Provide actionable messages for common errors
+            actions = {
+                190: "Token expired or invalid. Generate new token.",
+                102: "Session expired. Re-authenticate.",
+                4: "Rate limit hit. Wait and retry.",
+                17: "User rate limit. Wait and retry.",
+            }
+
+            return json.dumps({
+                "valid": False,
+                "error_code": code,
+                "message": error.get("message"),
+                "action": actions.get(code, "Check token and permissions")
+            })
+
+        return json.dumps({
+            "valid": True,
+            "user_id": data.get("id"),
+            "message": "Token is valid and working"
+        })
+
+    except Exception as e:
+        return json.dumps({
+            "valid": False,
+            "message": str(e),
+            "action": "Check network connectivity"
+        })

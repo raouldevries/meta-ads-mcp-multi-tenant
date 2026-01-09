@@ -511,6 +511,104 @@ result = await get_campaigns(account_id="act_123", fetch_all=True, max_pages=10)
 
 ---
 
+### Step 2.1: Token Validation Tools ✅
+
+**Completed:** 2026-01-09
+
+Implemented detailed token validation tools for debugging authentication issues and verifying token status.
+
+#### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/accounts.py` | Modified | Added `get_token_info` and `validate_token` tools |
+| `tests/test_token_validation.py` | Created | Comprehensive test suite (17 tests) |
+
+#### Key Components
+
+**get_token_info tool:**
+- Retrieves detailed token information via Meta's `debug_token` API
+- Returns token type, app ID, user ID, scopes, and permissions
+- Calculates expiration time with remaining days/hours
+- Shows `granular_scopes` for fine-grained permission inspection
+
+**validate_token tool:**
+- Quick pass/fail validation with minimal API overhead
+- Uses `/me` endpoint for fast response
+- Provides actionable error messages for common errors:
+  - Code 190: "Token expired or invalid. Generate new token."
+  - Code 102: "Session expired. Re-authenticate."
+  - Code 4: "Rate limit hit. Wait and retry."
+  - Code 17: "User rate limit. Wait and retry."
+
+#### Response Format (get_token_info)
+
+```json
+{
+  "is_valid": true,
+  "type": "USER",
+  "app_id": "123456789",
+  "user_id": "987654321",
+  "scopes": ["ads_management", "ads_read", "business_management"],
+  "granular_scopes": [],
+  "expiration": {
+    "timestamp": 1234567890,
+    "date": "2026-03-10T10:00:00",
+    "remaining_days": 60,
+    "remaining_hours": 12
+  },
+  "token_prefix": "EAAx1234567890abc...",
+  "api_version": "v23.0"
+}
+```
+
+#### Response Format (validate_token)
+
+```json
+{
+  "valid": true,
+  "user_id": "123456789",
+  "message": "Token is valid and working"
+}
+```
+
+Or on error:
+
+```json
+{
+  "valid": false,
+  "error_code": 190,
+  "message": "Error validating access token",
+  "action": "Token expired or invalid. Generate new token."
+}
+```
+
+#### Test Coverage
+
+| Test | Description |
+|------|-------------|
+| `test_get_token_info_no_token` | Returns error when no token configured |
+| `test_get_token_info_valid_token` | Returns detailed token information |
+| `test_get_token_info_with_expiration` | Calculates remaining days/hours |
+| `test_get_token_info_api_error` | Handles API errors with error codes |
+| `test_get_token_info_with_explicit_token` | Uses explicitly provided token |
+| `test_get_token_info_network_error` | Handles network errors gracefully |
+| `test_validate_token_no_token` | Returns error when no token |
+| `test_validate_token_valid` | Returns success for valid token |
+| `test_validate_token_expired` | Handles expired token with action |
+| `test_validate_token_rate_limited` | Handles rate limit (code 4) |
+| `test_validate_token_session_expired` | Handles session expired (code 102) |
+| `test_validate_token_network_error` | Handles network errors |
+| `test_validate_token_unknown_error` | Handles unknown error codes |
+
+#### Test Results
+
+```
+350 passed, 9 skipped, 2 deselected in 1.34s
+```
+
+---
+
 ## Git History
 
 | Commit | Description |
