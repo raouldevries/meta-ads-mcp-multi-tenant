@@ -12,6 +12,8 @@ from .resources import list_resources, get_resource
 from .utils import logger
 from .pipeboard_auth import pipeboard_auth_manager
 import time
+from .api import get_api_version
+from .presets import INSIGHT_PRESETS, DEFAULT_TIME_RANGES, DEFAULT_LIMITS
 
 # Initialize FastMCP server
 mcp_server = FastMCP("meta-ads")
@@ -19,6 +21,46 @@ mcp_server = FastMCP("meta-ads")
 # Register resource URIs
 mcp_server.resource(uri="meta-ads://resources")(list_resources)
 mcp_server.resource(uri="meta-ads://images/{resource_id}")(get_resource)
+
+
+@mcp_server.tool()
+async def get_capabilities() -> str:
+    """
+    Get list of all available Meta Ads MCP tools and capabilities.
+
+    Returns comprehensive info about:
+    - All available tools with descriptions
+    - Field presets for insights
+    - Default time ranges
+    - API version info
+    """
+    tools = []
+    for tool in mcp_server.list_tools():
+        description = tool.description or ""
+        if len(description) > 100:
+            description = f"{description[:100]}..."
+        tools.append({
+            "name": tool.name,
+            "description": description
+        })
+
+    return json.dumps({
+        "meta_ads_mcp": {
+            "api_version": get_api_version(),
+            "tool_count": len(tools)
+        },
+        "tools": tools,
+        "insight_presets": INSIGHT_PRESETS,
+        "time_range_presets": list(DEFAULT_TIME_RANGES.keys()),
+        "default_limits": DEFAULT_LIMITS,
+        "common_workflows": [
+            "1. health_check - Verify API connectivity",
+            "2. get_ad_accounts - List accessible accounts",
+            "3. get_campaigns - List campaigns for account",
+            "4. get_insights - Get performance metrics",
+            "5. compare_entities - Compare A/B performance"
+        ]
+    }, indent=2)
 
 
 class StreamableHTTPHandler:

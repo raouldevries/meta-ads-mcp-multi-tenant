@@ -689,6 +689,32 @@ Added field presets and default time range handling to keep insight responses co
 
 ---
 
+### Step 2.4: Get Capabilities Tool ✅
+
+**Completed:** 2026-01-09
+
+Added a discovery tool to list available MCP tools, presets, and defaults for quick self-documentation.
+
+#### Files Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `meta_ads_mcp/core/server.py` | Modified | Added `get_capabilities` tool with presets and tool list output |
+
+#### Key Features
+
+**get_capabilities tool:**
+- Lists all registered tools with short descriptions
+- Reports API version and tool count
+- Returns insight presets, time range presets, and default limits
+- Includes common workflow hints for quick onboarding
+
+#### Audit
+
+`py_compile` on `meta_ads_mcp/core/server.py` via venv python (no errors).
+
+---
+
 ## Git History
 
 | Commit | Description |
