@@ -9,7 +9,7 @@ import os
 from . import auth
 from .auth import needs_authentication, auth_manager, start_callback_server, shutdown_callback_server
 from .utils import logger
-from .retry import MetaApiError, parse_meta_error, RetryConfig, with_retry
+from .retry import MetaApiError, parse_meta_error, with_retry
 
 # Constants
 META_GRAPH_API_VERSION = "v22.0"
@@ -39,11 +39,7 @@ class GraphAPIError(Exception):
             auth_manager.invalidate_token()
 
 
-# Default retry configuration for Meta API requests
-DEFAULT_RETRY_CONFIG = RetryConfig()
-
-
-@with_retry(DEFAULT_RETRY_CONFIG)
+@with_retry(max_retries=3)
 async def _execute_api_request(
     url: str,
     method: str,
@@ -93,16 +89,14 @@ async def _execute_api_request(
             except (json.JSONDecodeError, ValueError):
                 error_info = {"status_code": response.status_code, "text": response.text}
 
-            # Parse error and check if retryable
-            meta_error = parse_meta_error(error_info, response.status_code, dict(response.headers))
+            # Parse error and raise (retry decorator will handle retryable errors)
+            meta_error = parse_meta_error(error_info, response.status_code)
 
             if meta_error.is_retryable:
-                logger.warning(f"Transient error detected (code={meta_error.error_code}, status={meta_error.http_status}), will retry")
-                raise meta_error
+                logger.warning(f"Transient error detected (code={meta_error.error_code}, status={meta_error.status_code}), will retry")
             else:
-                # Non-retryable error - raise with full context
                 logger.error(f"Non-retryable error (code={meta_error.error_code}): {meta_error.message}")
-                raise meta_error
+            raise meta_error
 
         logger.debug(f"API Response status: {response.status_code}")
 

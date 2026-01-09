@@ -152,11 +152,10 @@ class MetaApiError(Exception):
     @property
     def is_retryable(self) -> bool:
         """Check if this error should be retried."""
-        if self.error_code and RetryConfig.is_retryable_error(self.error_code):
-            return True
-        if self.status_code and RetryConfig.is_retryable_status(self.status_code):
-            return True
-        return False
+        return (
+            (self.error_code is not None and RetryConfig.is_retryable_error(self.error_code))
+            or (self.status_code is not None and RetryConfig.is_retryable_status(self.status_code))
+        )
 
     @property
     def max_retries(self) -> int:
@@ -205,11 +204,11 @@ def parse_meta_error(response_data: dict, status_code: Optional[int] = None) -> 
         MetaApiError with parsed details
     """
     error = response_data.get("error", {})
+    is_dict = isinstance(error, dict)
 
-    # Extract retry-after from various possible locations
+    # Extract retry-after from headers in error response
     retry_after = None
-    if isinstance(error, dict):
-        # Check headers in error response
+    if is_dict:
         headers = error.get("headers", {})
         if isinstance(headers, dict):
             retry_after_str = headers.get("Retry-After") or headers.get("retry-after")
@@ -219,15 +218,19 @@ def parse_meta_error(response_data: dict, status_code: Optional[int] = None) -> 
                 except (ValueError, TypeError):
                     pass
 
-    return MetaApiError(
-        message=error.get("message", "Unknown error") if isinstance(error, dict) else str(error),
-        error_code=error.get("code") if isinstance(error, dict) else None,
-        error_subcode=error.get("error_subcode") if isinstance(error, dict) else None,
-        error_type=error.get("type") if isinstance(error, dict) else None,
-        status_code=status_code,
-        retry_after=retry_after,
-        fbtrace_id=error.get("fbtrace_id") if isinstance(error, dict) else None
-    )
+    # Build error from dict fields or use string representation
+    if is_dict:
+        return MetaApiError(
+            message=error.get("message", "Unknown error"),
+            error_code=error.get("code"),
+            error_subcode=error.get("error_subcode"),
+            error_type=error.get("type"),
+            status_code=status_code,
+            retry_after=retry_after,
+            fbtrace_id=error.get("fbtrace_id")
+        )
+
+    return MetaApiError(message=str(error), status_code=status_code)
 
 
 def with_retry(max_retries: int = 3, retry_on_all_errors: bool = False):
@@ -250,10 +253,8 @@ def with_retry(max_retries: int = 3, retry_on_all_errors: bool = False):
         @wraps(func)
         async def wrapper(*args, **kwargs) -> T:
             last_error: Optional[Exception] = None
-            attempts_made = 0
 
             for attempt in range(max_retries + 1):
-                attempts_made = attempt + 1
                 try:
                     return await func(*args, **kwargs)
 

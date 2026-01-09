@@ -1,8 +1,7 @@
 """Tests for the retry module with exponential backoff."""
 
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from meta_ads_mcp.core.retry import (
     RetryConfig,
     MetaApiError,
