@@ -247,6 +247,10 @@ source venv/bin/activate
 python -c "from meta_ads_mcp.core.retry import with_retry, RetryConfig; print('Retry module loaded successfully')"
 ```
 
+**Audit Fix Sub-steps:**
+- Update `with_retry` to cap retries with `min(max_retries, e.max_retries)` and use that for attempt comparisons/logs.
+- Extend `parse_meta_error` to accept response headers and honor `Retry-After` from headers.
+
 ---
 
 #### Step 1.1.2: Add retry module to core exports
@@ -308,6 +312,11 @@ async def make_api_request(
 ```bash
 python -m pytest tests/test_api.py -v -k "retry" 2>/dev/null || echo "Add retry tests in step 1.1.4"
 ```
+
+**Audit Fix Sub-steps:**
+- Raise `MetaApiError` for retryable HTTP status codes even when response bodies lack `"error"`.
+- Wrap network/timeout exceptions into retryable errors.
+- Pass response headers into `parse_meta_error` so `Retry-After` is honored.
 
 ---
 
@@ -615,6 +624,11 @@ async def health_check(
 # "Run health check on Meta Ads API"
 ```
 
+**Audit Fix Sub-steps:**
+- Replace `aiohttp` usage with `httpx` and add explicit timeouts.
+- Use `get_api_base_url()`/`get_api_version()` instead of hardcoded `v22.0`.
+- Use app access token for `debug_token` or document the requirement explicitly.
+
 ---
 
 #### Step 1.2.2: Add health check test
@@ -646,6 +660,11 @@ async def test_health_check():
 ```bash
 python -m pytest tests/test_accounts.py -v -k "health_check" -m e2e
 ```
+
+**Audit Fix Sub-steps:**
+- Decide whether this is a unit test or e2e test.
+- If unit: mock HTTP calls and remove the `e2e` marker.
+- If e2e: document required env vars and add skip conditions.
 
 ---
 
@@ -971,6 +990,10 @@ def add_pagination_params(
 python -c "from meta_ads_mcp.core.pagination import fetch_all_pages; print('Pagination module loaded')"
 ```
 
+**Audit Fix Sub-steps:**
+- Implement pagination using `httpx` or reuse `make_api_request` to keep auth/retry consistent.
+- Add explicit timeouts to pagination requests.
+
 ---
 
 #### Step 1.4.2: Add fetch_all parameter to list tools
@@ -1037,6 +1060,11 @@ async def get_campaigns(
 # Test with Claude: "Get all campaigns for account act_XXX with fetch_all=true"
 ```
 
+**Audit Fix Sub-steps:**
+- Define URL construction explicitly using `get_api_base_url()` and endpoint path.
+- Resolve `access_token` when absent (use cached token helper).
+- Return `pagination_info` metadata in the `fetch_all` response.
+
 ---
 
 #### Step 1.4.3: Add pagination tests
@@ -1093,6 +1121,11 @@ class TestAddPaginationParams:
 ```bash
 python -m pytest tests/test_pagination.py -v
 ```
+
+**Audit Fix Sub-steps:**
+- Add tests for `fetch_all_pages` multi-page behavior with mocked responses.
+- Add tests for `paginate_generator` iteration and error handling.
+- Add tests for max page/item limits.
 
 ---
 
@@ -1260,6 +1293,11 @@ async def validate_token(
 ```bash
 # Test with Claude: "Get token info" or "Validate my Meta token"
 ```
+
+**Audit Fix Sub-steps:**
+- Use `httpx` instead of `aiohttp` and add explicit timeouts.
+- Import `get_api_base_url()`/`get_api_version()` for URL construction.
+- Use app access token for `debug_token` or document requirements clearly.
 
 ---
 
@@ -1952,6 +1990,10 @@ async def validate_creative_specs(
 # Test with Claude: "Validate creative with headline 'Summer Sale 50% Off' and primary text '...'"
 ```
 
+**Audit Fix Sub-steps:**
+- Use `httpx` with timeouts for image URL checks.
+- If `HEAD` fails or returns 405, fall back to `GET` or return a warning.
+
 ---
 
 ## Implementation Checklist
@@ -1986,10 +2028,10 @@ async def validate_creative_specs(
   - [ ] 2.4.1 Create get_capabilities tool
 
 ### Tier 3: Nice-to-Have (Do If Time)
-- [ ] 3.1 Export to CSV/JSON
-  - [ ] 3.1.1 Create export_insights tool
-- [ ] 3.2 Creative Validation Helpers
-  - [ ] 3.2.1 Create validate_creative_specs tool
+- [x] 3.1 Export to CSV/JSON
+  - [x] 3.1.1 Create export_insights tool
+- [x] 3.2 Creative Validation Helpers
+  - [x] 3.2.1 Create validate_creative_specs tool
 
 ---
 
@@ -2025,3 +2067,22 @@ async def validate_creative_specs(
 - Test after each step before proceeding
 - Restart MCP server after making changes to test with Claude
 - Commit after each completed improvement for easy rollback
+
+---
+## Audit Findings (2026-01-09)
+
+### Issues Requiring Action
+- Step 1.1.1 (Correctness/Completeness): `with_retry` ignores decorator `max_retries` and `parse_meta_error` cannot honor `Retry-After` headers. Fix by capping retries with `min(max_retries, e.max_retries)` and passing response headers into `parse_meta_error`.
+- Step 1.1.3 (Correctness/Completeness): Retry integration only handles JSON `"error"` responses; no retry on non-JSON or transport errors. Wrap the actual HTTP call, raise on retryable HTTP status codes, and handle timeouts/network exceptions.
+- Step 1.2.1 (Correctness/Feasibility): Uses `aiohttp`, hardcodes `v22.0`, and uses a user token for `debug_token`. Switch to `httpx`, use `get_api_base_url()`, and use app access token for `debug_token`.
+- Step 1.4.1 (Correctness/Feasibility): Pagination helper uses `aiohttp` and bypasses shared retry/auth. Implement with `httpx` and/or `make_api_request` plus timeouts.
+- Step 1.4.2 (Completeness/Clarity): `url` not defined; access token handling and pagination metadata missing. Add explicit URL construction, token resolution, and return `pagination_info`.
+- Step 1.4.3 (Completeness): Tests only cover `add_pagination_params`. Add tests for `fetch_all_pages`/`paginate_generator` with mocked responses.
+- Step 2.1.1 (Correctness/Feasibility): Uses `aiohttp` and undefined `API_VERSION`, and uses user token for `debug_token`. Import `get_api_base_url`/`get_api_version`, use `httpx`, and use app access token.
+- Step 3.2.1 (Feasibility/Completeness): Uses `aiohttp` without guidance and no fallback if `HEAD` fails. Use `httpx` with timeouts and fallback to `GET` or warn.
+
+### Items Flagged for Review
+- Step 1.2.2: Clarify whether the health check test is unit (mocked) or e2e (requires real credentials). Current plan is ambiguous.
+
+### Verification Notes
+Verified steps: 1.1.2, 1.1.4, 1.3.1, 1.3.2, 1.3.3, 2.2.1, 2.3.1, 2.3.2, 2.4.1, 3.1.1.
