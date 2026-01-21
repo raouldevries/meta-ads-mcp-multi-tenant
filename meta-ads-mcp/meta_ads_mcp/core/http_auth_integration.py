@@ -211,22 +211,29 @@ def setup_fastmcp_http_auth(mcp_server):
     if not app_provider_methods:
         logger.error("No suitable app provider method (streamable_http_app or sse_app) found on mcp_server. Cannot add HTTP Auth middleware.")
         # Fallback or error handling might be needed here if this is critical
-    
+
+    def create_patched_app_provider(original_method, name):
+        """Factory function to create patched app provider with proper closure binding.
+
+        This fixes a closure capture bug where loop variables would be captured by
+        reference, causing all patched methods to call the last assigned method.
+        """
+        def patched_app_provider(*args, **kwargs):
+            # Call the original method to get/create the Starlette app
+            app = original_method(*args, **kwargs)
+            if app:
+                logger.debug(f"Original {name} returned app: {type(app)}. Adding AuthInjectionMiddleware.")
+                # Now, add our middleware to this specific app instance
+                setup_starlette_middleware(app)
+            else:
+                logger.error(f"Original {name} returned None or a non-app object.")
+            return app
+        return patched_app_provider
+
     for method_name in app_provider_methods:
         original_app_provider_method = getattr(mcp_server, method_name)
-        
-        def new_patched_app_provider_method(*args, **kwargs):
-            # Call the original method to get/create the Starlette app
-            app = original_app_provider_method(*args, **kwargs)
-            if app:
-                logger.debug(f"Original {method_name} returned app: {type(app)}. Adding AuthInjectionMiddleware.")
-                # Now, add our middleware to this specific app instance
-                setup_starlette_middleware(app) 
-            else:
-                logger.error(f"Original {method_name} returned None or a non-app object.")
-            return app
-            
-        setattr(mcp_server, method_name, new_patched_app_provider_method)
+        patched_method = create_patched_app_provider(original_app_provider_method, method_name)
+        setattr(mcp_server, method_name, patched_method)
         logger.debug(f"Patched mcp_server.{method_name} to inject AuthInjectionMiddleware.")
 
     # The old setup_request_middleware call is no longer needed here,

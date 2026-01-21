@@ -235,8 +235,8 @@ def login_cli():
     Command-line function to authenticate with Meta
     """
     logger.info("Starting Meta Ads CLI authentication flow")
-    print("Starting Meta Ads CLI authentication flow...")
-    
+    print("Starting Meta Ads CLI authentication flow...", file=sys.stderr)
+
     # Call the common login function
     login_auth()
 
@@ -275,7 +275,7 @@ def main():
     # Validate CLI argument combinations
     if args.transport == "stdio" and (args.port != 8080 or args.host != "localhost" or args.sse_response):
         logger.warning("HTTP transport arguments (--port, --host, --sse-response) are ignored when using stdio transport")
-        print("Warning: HTTP transport arguments are ignored when using stdio transport")
+        print("Warning: HTTP transport arguments are ignored when using stdio transport", file=sys.stderr)
     
     # Update app ID if provided as environment variable or command line arg
     from .auth import auth_manager, meta_config
@@ -306,7 +306,7 @@ def main():
     if args.version:
         from meta_ads_mcp import __version__
         logger.info(f"Displaying version: {__version__}")
-        print(f"Meta Ads MCP v{__version__}")
+        print(f"Meta Ads MCP v{__version__}", file=sys.stderr)
         return 0
     
     # Handle login command
@@ -318,13 +318,13 @@ def main():
     pipeboard_api_token = os.environ.get("PIPEBOARD_API_TOKEN")
     if pipeboard_api_token:
         logger.info("Using Pipeboard authentication")
-        print("✅ Pipeboard authentication enabled")
-        print(f"   API token: {pipeboard_api_token[:8]}...{pipeboard_api_token[-4:]}")
+        print("✅ Pipeboard authentication enabled", file=sys.stderr)
+        print(f"   API token: ***TOKEN***", file=sys.stderr)
         # Check for existing token
         token = pipeboard_auth_manager.get_access_token()
         if not token:
             logger.info("No valid Pipeboard token found. Initiating browser-based authentication flow.")
-            print("No valid Meta token found. Opening browser for authentication...")
+            print("No valid Meta token found. Opening browser for authentication...", file=sys.stderr)
             try:
                 # Initialize the auth flow and get the login URL
                 auth_data = pipeboard_auth_manager.initiate_auth_flow()
@@ -332,33 +332,33 @@ def main():
                 if login_url:
                     logger.info(f"Opening browser with login URL: {login_url}")
                     webbrowser.open(login_url)
-                    print("Please authorize the application in your browser.")
-                    print("After authorization, the token will be automatically retrieved.")
-                    print("Waiting for authentication to complete...")
-                    
+                    print("Please authorize the application in your browser.", file=sys.stderr)
+                    print("After authorization, the token will be automatically retrieved.", file=sys.stderr)
+                    print("Waiting for authentication to complete...", file=sys.stderr)
+
                     # Poll for token completion
                     max_attempts = 30  # Try for 30 * 2 = 60 seconds
                     for attempt in range(max_attempts):
-                        print(f"Waiting for authentication... ({attempt+1}/{max_attempts})")
+                        print(f"Waiting for authentication... ({attempt+1}/{max_attempts})", file=sys.stderr)
                         # Try to get the token again
                         token = pipeboard_auth_manager.get_access_token(force_refresh=True)
                         if token:
-                            print("Authentication successful!")
+                            print("Authentication successful!", file=sys.stderr)
                             break
                         time.sleep(2)  # Wait 2 seconds between attempts
-                    
+
                     if not token:
-                        print("Authentication timed out. Starting server anyway.")
-                        print("You may need to restart the server after completing authentication.")
+                        print("Authentication timed out. Starting server anyway.", file=sys.stderr)
+                        print("You may need to restart the server after completing authentication.", file=sys.stderr)
                 else:
                     logger.error("No login URL received from Pipeboard API")
-                    print("Error: Could not get authentication URL. Check your API token.")
+                    print("Error: Could not get authentication URL. Check your API token.", file=sys.stderr)
             except Exception as e:
                 logger.error(f"Error initiating browser-based authentication: {e}")
-                print(f"Error: Could not start authentication: {e}")
+                print(f"Error: Could not start authentication: {e}", file=sys.stderr)
         else:
-            print(f"✅ Valid Pipeboard access token found")
-            print(f"   Token preview: {token[:10]}...{token[-5:]}")
+            print(f"✅ Valid Pipeboard access token found", file=sys.stderr)
+            print(f"   Token preview: ***TOKEN***", file=sys.stderr)
     
     # Transport-specific server initialization and startup
     if args.transport == "streamable-http":
@@ -368,11 +368,11 @@ def main():
         logger.info("Primary auth method: Bearer Token (recommended)")
         logger.info("Fallback auth method: Custom Meta App OAuth (complex setup)")
         
-        print(f"Starting Meta Ads MCP server with Streamable HTTP transport")
-        print(f"Server will listen on {args.host}:{args.port}")
-        print(f"Response format: {'SSE' if args.sse_response else 'JSON'}")
-        print("Primary authentication: Bearer Token (via Authorization: Bearer <token> header)")
-        print("Fallback authentication: Custom Meta App OAuth (via X-META-APP-ID header)")
+        print(f"Starting Meta Ads MCP server with Streamable HTTP transport", file=sys.stderr)
+        print(f"Server will listen on {args.host}:{args.port}", file=sys.stderr)
+        print(f"Response format: {'SSE' if args.sse_response else 'JSON'}", file=sys.stderr)
+        print("Primary authentication: Bearer Token (via Authorization: Bearer <token> header)", file=sys.stderr)
+        print("Fallback authentication: Custom Meta App OAuth (via X-META-APP-ID header)", file=sys.stderr)
         
         # Configure the existing server with streamable HTTP settings
         mcp_server.settings.host = args.host
@@ -394,14 +394,14 @@ def main():
             # Setup the FastMCP HTTP auth integration
             setup_fastmcp_http_auth(mcp_server)
             logger.info("FastMCP HTTP authentication integration setup successful")
-            print("✅ FastMCP HTTP authentication integration enabled")
-            print("   - Bearer tokens via Authorization: Bearer <token> header")
-            print("   - Direct Meta tokens via X-META-ACCESS-TOKEN header")
-            
+            print("✅ FastMCP HTTP authentication integration enabled", file=sys.stderr)
+            print("   - Bearer tokens via Authorization: Bearer <token> header", file=sys.stderr)
+            print("   - Direct Meta tokens via X-META-ACCESS-TOKEN header", file=sys.stderr)
+
         except Exception as e:
             logger.error(f"Failed to setup FastMCP HTTP authentication integration: {e}")
-            print(f"⚠️  FastMCP HTTP authentication integration setup failed: {e}")
-            print("   Server will still start but may not support header-based auth")
+            print(f"⚠️  FastMCP HTTP authentication integration setup failed: {e}", file=sys.stderr)
+            print("   Server will still start but may not support header-based auth", file=sys.stderr)
         
         # Log final server configuration
         logger.info(f"FastMCP server configured with:")
@@ -414,14 +414,14 @@ def main():
         # Start the FastMCP server with Streamable HTTP transport
         try:
             logger.info("Starting FastMCP server with Streamable HTTP transport")
-            print(f"✅ Server configured successfully")
-            print(f"   URL: http://{args.host}:{args.port}{mcp_server.settings.streamable_http_path}/")
-            print(f"   Mode: {'Stateless' if mcp_server.settings.stateless_http else 'Stateful'}")
-            print(f"   Format: {'JSON' if mcp_server.settings.json_response else 'SSE'}")
+            print(f"✅ Server configured successfully", file=sys.stderr)
+            print(f"   URL: http://{args.host}:{args.port}{mcp_server.settings.streamable_http_path}/", file=sys.stderr)
+            print(f"   Mode: {'Stateless' if mcp_server.settings.stateless_http else 'Stateful'}", file=sys.stderr)
+            print(f"   Format: {'JSON' if mcp_server.settings.json_response else 'SSE'}", file=sys.stderr)
             mcp_server.run(transport="streamable-http")
         except Exception as e:
             logger.error(f"Error starting Streamable HTTP server: {e}")
-            print(f"Error: Failed to start Streamable HTTP server: {e}")
+            print(f"Error: Failed to start Streamable HTTP server: {e}", file=sys.stderr)
             return 1
     else:
         # Default stdio transport

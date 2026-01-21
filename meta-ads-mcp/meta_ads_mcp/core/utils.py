@@ -8,6 +8,7 @@ import base64
 import time
 import asyncio
 import os
+import sys
 import json
 import logging
 import pathlib
@@ -22,15 +23,16 @@ META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
 using_pipeboard = bool(os.environ.get("PIPEBOARD_API_TOKEN", ""))
 
 # Print warning if Meta app credentials are not configured and not using Pipeboard
+# Use stderr to avoid corrupting stdio MCP transport
 if not using_pipeboard:
     if not META_APP_ID:
-        print("WARNING: META_APP_ID environment variable is not set.")
-        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.")
-        print("ALTERNATIVE: For direct Meta authentication, set META_APP_ID to your Meta App ID.")
+        print("WARNING: META_APP_ID environment variable is not set.", file=sys.stderr)
+        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.", file=sys.stderr)
+        print("ALTERNATIVE: For direct Meta authentication, set META_APP_ID to your Meta App ID.", file=sys.stderr)
     if not META_APP_SECRET:
-        print("WARNING: META_APP_SECRET environment variable is not set.")
-        print("NOTE: This is only needed for direct Meta authentication. Pipeboard authentication doesn't require this.")
-        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.")
+        print("WARNING: META_APP_SECRET environment variable is not set.", file=sys.stderr)
+        print("NOTE: This is only needed for direct Meta authentication. Pipeboard authentication doesn't require this.", file=sys.stderr)
+        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.", file=sys.stderr)
 
 # Configure logging to file
 def setup_logging():
@@ -155,34 +157,34 @@ async def download_image(url: str) -> Optional[bytes]:
         Image data as bytes if successful, None otherwise
     """
     try:
-        print(f"Attempting to download image from URL: {url}")
-        
+        logger.debug(f"Attempting to download image from URL: {url}")
+
         # Use minimal headers like curl does
         headers = {
             "User-Agent": "curl/8.4.0",
             "Accept": "*/*"
         }
-        
+
         async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
             # Simple GET request just like curl
             response = await client.get(url, headers=headers)
-            
+
             # Check response
             if response.status_code == 200:
-                print(f"Successfully downloaded image: {len(response.content)} bytes")
+                logger.debug(f"Successfully downloaded image: {len(response.content)} bytes")
                 return response.content
             else:
-                print(f"Failed to download image: HTTP {response.status_code}")
+                logger.debug(f"Failed to download image: HTTP {response.status_code}")
                 return None
-                
+
     except httpx.HTTPStatusError as e:
-        print(f"HTTP Error when downloading image: {e}")
+        logger.debug(f"HTTP Error when downloading image: {e}")
         return None
     except httpx.RequestError as e:
-        print(f"Request Error when downloading image: {e}")
+        logger.debug(f"Request Error when downloading image: {e}")
         return None
     except Exception as e:
-        print(f"Unexpected error downloading image: {e}")
+        logger.debug(f"Unexpected error downloading image: {e}")
         return None
 
 
@@ -201,7 +203,7 @@ async def try_multiple_download_methods(url: str) -> Optional[bytes]:
     if image_data:
         return image_data
 
-    print("Direct download failed")
+    logger.debug("Direct download failed")
 
     # Try with browser-like User-Agent as fallback
     try:
@@ -213,10 +215,10 @@ async def try_multiple_download_methods(url: str) -> Optional[bytes]:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, headers=headers, timeout=30.0)
             response.raise_for_status()
-            print(f"Browser-like request succeeded: {len(response.content)} bytes")
+            logger.debug(f"Browser-like request succeeded: {len(response.content)} bytes")
             return response.content
     except Exception as e:
-        print(f"Fallback download failed: {str(e)}")
+        logger.debug(f"Fallback download failed: {str(e)}")
 
     return None
 

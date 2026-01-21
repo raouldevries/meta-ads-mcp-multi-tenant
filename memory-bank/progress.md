@@ -1,6 +1,6 @@
 # Meta Ads MCP Server Setup Progress
 
-**Date:** 2026-01-08 (Updated)
+**Date:** 2026-01-21 (Updated)
 **Project:** Meta Ads Analyzer
 **Goal:** Self-hosted Meta Ads MCP server for Claude Code (and later Claude Desktop)
 
@@ -927,10 +927,64 @@ The existing analysis tools couldn't extract headlines from Advantage+ Creative 
 
 ---
 
+## Code Audit Fixes (2026-01-21)
+
+**Completed:** 2026-01-21
+
+Implemented critical stability and security fixes based on comprehensive code audit. Focused on highest-risk issues that could cause crashes or protocol corruption.
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `meta_ads_mcp/core/callback_server.py` | Fixed event loop crash, replaced prints with logger |
+| `meta_ads_mcp/core/server.py` | Redirected all prints to stderr, masked token previews |
+| `meta_ads_mcp/core/auth.py` | Redirected prints to stderr |
+| `meta_ads_mcp/core/utils.py` | Redirected import-time prints to stderr, replaced function prints with logger |
+| `meta_ads_mcp/core/ads.py` | Replaced prints with logger calls |
+| `meta_ads_mcp/core/http_auth_integration.py` | Fixed closure capture bug in middleware patching |
+
+### Fix #1: Closure Capture Bug in HTTP Auth Middleware
+
+**Risk Level:** Highest
+**Issue:** `setup_fastmcp_http_auth()` loop captured `original_app_provider_method` by reference, causing all patched methods to call the last assigned method.
+**Fix:** Added factory function `create_patched_app_provider()` to properly bind loop variables at creation time.
+
+### Fix #2: Event Loop Crash on Python 3.10+
+
+**Risk Level:** Highest
+**Issue:** `asyncio.get_event_loop().time()` in callback server thread would raise `RuntimeError: There is no current event loop` on modern Python.
+**Fix:** Replaced with `time.time()` from standard library.
+
+### Fix #3: Stdout Prints Corrupting MCP stdio Transport
+
+**Risk Level:** Highest
+**Issue:** `print()` calls during import and runtime corrupt the JSON-RPC stream on stdio transport, making the server appear broken.
+**Fix:**
+- All prints now use `file=sys.stderr` to avoid protocol corruption
+- Debug prints converted to `logger.debug()` calls
+- Preserved user experience for HTTP transport
+
+### Bonus Fix: Token Leakage in Logs
+
+**Risk Level:** Medium
+**Issue:** Token previews like `{token[:10]}...{token[-5:]}` were printed, enabling potential replay attacks.
+**Fix:** Replaced all token previews with `***TOKEN***` placeholder.
+
+### Verification
+
+- ✅ 350 unit tests passed
+- ✅ Health check API call succeeded
+- ✅ Token validation working
+- ✅ Campaign data retrieval working
+
+---
+
 ## Git History
 
 | Commit | Description |
 |--------|-------------|
+| `TBD` | Fix critical stability issues: closure bug, event loop crash, stdio corruption |
 | `09504cf` | Add get_headline_performance tool for ad copy analysis |
 | `65dff3d` | Change only_with_spend default to True for all Meta API query tools |
 | `3f19f6b` | Simplify retry module code for clarity (bug fixes + cleanup) |

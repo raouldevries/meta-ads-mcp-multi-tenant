@@ -5,6 +5,7 @@ import time
 import platform
 import pathlib
 import os
+import sys
 import webbrowser
 import asyncio
 import json
@@ -521,49 +522,49 @@ def login():
     """
     Start the login flow to authenticate with Meta
     """
-    print("Starting Meta Ads authentication flow...")
-    
+    print("Starting Meta Ads authentication flow...", file=sys.stderr)
+
     try:
         # Start the callback server first
         try:
             port = start_callback_server()
         except Exception as callback_error:
-            print(f"Error: {callback_error}")
-            print("Callback server is disabled. Please use alternative authentication methods:")
-            print("- Set PIPEBOARD_API_TOKEN environment variable for Pipeboard authentication")
-            print("- Or provide a direct META_ACCESS_TOKEN environment variable")
+            print(f"Error: {callback_error}", file=sys.stderr)
+            print("Callback server is disabled. Please use alternative authentication methods:", file=sys.stderr)
+            print("- Set PIPEBOARD_API_TOKEN environment variable for Pipeboard authentication", file=sys.stderr)
+            print("- Or provide a direct META_ACCESS_TOKEN environment variable", file=sys.stderr)
             return
-        
+
         # Get the auth URL and open the browser
         auth_url = auth_manager.get_auth_url()
-        print(f"Opening browser with URL: {auth_url}")
+        print(f"Opening browser with URL: {auth_url}", file=sys.stderr)
         webbrowser.open(auth_url)
-        
+
         # Wait for token to be received
-        print("Waiting for authentication to complete...")
+        print("Waiting for authentication to complete...", file=sys.stderr)
         max_wait = 300  # 5 minutes
         wait_interval = 2  # 2 seconds
-        
+
         for _ in range(max_wait // wait_interval):
             if token_container["token"]:
                 token = token_container["token"]
-                print("Authentication successful!")
+                print("Authentication successful!", file=sys.stderr)
                 # Verify token works by getting basic user info
                 try:
                     from .api import make_api_request
                     result = asyncio.run(make_api_request("me", token, {}))
-                    print(f"Authenticated as: {result.get('name', 'Unknown')} (ID: {result.get('id', 'Unknown')})")
+                    print(f"Authenticated as: {result.get('name', 'Unknown')} (ID: {result.get('id', 'Unknown')})", file=sys.stderr)
                     return
                 except Exception as e:
-                    print(f"Warning: Could not verify token: {e}")
+                    print(f"Warning: Could not verify token: {e}", file=sys.stderr)
                     return
             time.sleep(wait_interval)
-        
-        print("Authentication timed out. Please try again.")
+
+        print("Authentication timed out. Please try again.", file=sys.stderr)
     except Exception as e:
-        print(f"Error during authentication: {e}")
-        print(f"Direct authentication URL: {auth_manager.get_auth_url()}")
-        print("You can manually open this URL in your browser to complete authentication.")
+        print(f"Error during authentication: {e}", file=sys.stderr)
+        print(f"Direct authentication URL: {auth_manager.get_auth_url()}", file=sys.stderr)
+        print("You can manually open this URL in your browser to complete authentication.", file=sys.stderr)
 
 # Initialize auth manager with a placeholder - will be updated at runtime
 META_APP_ID = os.environ.get("META_APP_ID", "YOUR_META_APP_ID")
