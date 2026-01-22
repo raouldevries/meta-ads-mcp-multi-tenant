@@ -154,6 +154,100 @@ export META_API_VERSION=v22.0
 -e META_API_VERSION=v22.0
 ```
 
+### Multi-Account Setup
+
+For users managing multiple ad accounts across different Business Managers, you can configure multiple API keys and accounts using a `credentials.json` file.
+
+#### Credentials File Location
+
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/meta-ads-mcp/credentials.json` |
+| Windows | `%APPDATA%\meta-ads-mcp\credentials.json` |
+| Linux | `~/.config/meta-ads-mcp/credentials.json` |
+
+#### Configuration Format
+
+```json
+{
+  "version": 2,
+  "api_keys": {
+    "client_a": {
+      "access_token": "EAAxxxxxxx...",
+      "business_manager_id": "123456789",
+      "app_id": "987654321",
+      "expires_at": "2026-03-15T00:00:00Z",
+      "tier": "standard"
+    },
+    "client_b": {
+      "access_token": "EAAyyyyyyy...",
+      "business_manager_id": "234567890",
+      "tier": "development"
+    }
+  },
+  "accounts": {
+    "client_a_main": {
+      "display_name": "Client A - Main Account",
+      "ad_account_id": "act_111111111",
+      "api_key": "client_a"
+    },
+    "client_a_test": {
+      "display_name": "Client A - Test Account",
+      "ad_account_id": "act_222222222",
+      "api_key": "client_a"
+    },
+    "client_b_account": {
+      "display_name": "Client B Account",
+      "ad_account_id": "act_333333333",
+      "api_key": "client_b"
+    }
+  },
+  "default_account": "client_a_main"
+}
+```
+
+#### Configuration Options
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `version` | Yes | Must be `2` |
+| `api_keys` | Yes | Map of API key configurations (max 3 keys) |
+| `accounts` | Yes | Map of ad account configurations (max 10 accounts) |
+| `default_account` | No | Account to use when none specified |
+
+**API Key Options:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `access_token` | Yes | Meta API access token (starts with `EAA`) |
+| `business_manager_id` | Yes | Business Manager ID that owns this token |
+| `app_id` | No | Meta App ID |
+| `expires_at` | No | Token expiration date (ISO 8601 format) |
+| `tier` | No | Rate limit tier: `standard` (default) or `development` |
+
+**Account Options:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `display_name` | Yes | Human-readable account name |
+| `ad_account_id` | Yes | Meta ad account ID (format: `act_XXXXXXXXX`) |
+| `api_key` | Yes | Reference to an API key defined in `api_keys` |
+
+#### Multi-Account MCP Tools
+
+When using multi-account configuration, these additional tools are available:
+
+- `list_configured_accounts` - List all configured accounts with status
+- `switch_account` - Switch to a different account for subsequent calls
+- `get_current_account` - Get details of the current active account
+- `get_rate_limit_status` - Show rate limit status for all API keys
+- `validate_credentials` - Run validation checks on all credentials
+- `get_token_expiration_status` - Check token expiration status
+
+#### Backward Compatibility
+
+If no `credentials.json` exists, the server falls back to environment variables (`META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`) with a single "default" account. Existing single-account setups continue to work unchanged.
+
 ### Available MCP Tools
 
 1. `mcp_meta_ads_get_ad_accounts`
@@ -502,3 +596,41 @@ The easiest way to avoid any setup issues is to **[🎯 use our Remote MCP inste
 ### Local Installation Issues
 
 For local installation issues, refer to the source repository. **For the easiest experience, we recommend using [Remote MCP](https://pipeboard.co) instead.**
+
+### Multi-Account Troubleshooting
+
+#### "Account not found" Error
+- Verify the account name exists in your `credentials.json`
+- Check spelling matches exactly (case-sensitive)
+- Run `list_configured_accounts` to see available accounts
+
+#### "Invalid token" at Startup
+- The preflight check validates all tokens on startup
+- Check the token hasn't expired (look at `expires_at`)
+- Regenerate the token in Meta Business Manager
+- Run `validate_credentials` for detailed diagnostics
+
+#### "Rate limit exceeded" Error
+- Each API key has separate rate limits
+- Development tier: 60 calls per 5 minutes
+- Standard tier: 9000 calls per 5 minutes
+- Use `get_rate_limit_status` to check current usage
+- Wait for the `retry_after_seconds` before retrying
+
+#### Token Expiration Warnings
+- Warnings appear at startup when tokens expire within 7 days
+- Update `expires_at` in credentials.json after refreshing tokens
+- Use `get_token_expiration_status` to check all tokens
+
+#### credentials.json Not Found
+- Ensure the file is in the correct platform-specific location:
+  - macOS: `~/Library/Application Support/meta-ads-mcp/credentials.json`
+  - Windows: `%APPDATA%\meta-ads-mcp\credentials.json`
+  - Linux: `~/.config/meta-ads-mcp/credentials.json`
+- The server falls back to environment variables if no file exists
+
+#### Validation Errors
+- `"Unsupported credentials version"` - Set `"version": 2` in credentials.json
+- `"references unknown api_key"` - Account's `api_key` must match a key in `api_keys`
+- `"Duplicate access_token"` - Each API key must have a unique token
+- `"Duplicate ad_account_id"` - Each account must have a unique ad account ID

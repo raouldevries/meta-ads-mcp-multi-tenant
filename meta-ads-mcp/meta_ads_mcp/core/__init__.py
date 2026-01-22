@@ -29,6 +29,9 @@ from . import pixels  # Meta Pixel management, custom conversions
 from . import leads  # Lead forms and lead retrieval (requires leads_retrieval permission)
 from . import analysis  # Analysis tools optimized for Claude context window
 
+# Multi-tenant credential management
+from . import account_tools  # list_configured_accounts, switch_account, etc.
+
 __all__ = [
     'mcp_server',
     # Retry logic

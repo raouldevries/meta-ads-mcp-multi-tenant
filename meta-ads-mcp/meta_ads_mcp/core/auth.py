@@ -12,6 +12,14 @@ import json
 from .utils import logger
 import requests
 
+# Import credential manager for multi-tenant support
+from .credentials import (
+    get_credential_manager,
+    AccountNotFoundError,
+    TokenExpiredError,
+    CredentialError,
+)
+
 # Import from the new callback server module
 from .callback_server import (
     start_callback_server,
@@ -570,4 +578,81 @@ def login():
 META_APP_ID = os.environ.get("META_APP_ID", "YOUR_META_APP_ID")
 
 # Create the auth manager
-auth_manager = AuthManager(META_APP_ID) 
+auth_manager = AuthManager(META_APP_ID)
+
+
+# === Multi-Tenant Credential Support ===
+
+def get_access_token_for_account(account_name: Optional[str] = None) -> Optional[str]:
+    """
+    Get access token for the specified or current account.
+
+    This function supports multi-tenant credential management.
+    It first checks the credential manager for named accounts,
+    then falls back to the legacy auth flow.
+
+    Args:
+        account_name: Account name from credentials.json, or None for current account
+
+    Returns:
+        Access token if available, None otherwise
+    """
+    # Try credential manager first
+    try:
+        credential_manager = get_credential_manager()
+        if credential_manager.accounts:
+            token = credential_manager.get_token_for_account(account_name)
+            logger.debug(f"Using token from credential_manager for account: {account_name or 'current'}")
+            return token
+    except AccountNotFoundError as e:
+        logger.warning(f"Account not found in credential_manager: {e}")
+    except TokenExpiredError as e:
+        logger.error(f"Token expired: {e}")
+        return None
+    except CredentialError as e:
+        logger.debug(f"Credential manager error (falling back to legacy auth): {e}")
+
+    # Fall back to legacy auth (ENV var or OAuth)
+    env_token = os.environ.get("META_ACCESS_TOKEN")
+    if env_token:
+        logger.debug("Using access token from META_ACCESS_TOKEN environment variable")
+        return env_token
+
+    # Try auth_manager
+    token = auth_manager.get_access_token()
+    if token:
+        logger.debug("Using access token from auth_manager")
+        return token
+
+    return None
+
+
+def get_ad_account_id_for_account(account_name: Optional[str] = None) -> Optional[str]:
+    """
+    Get ad account ID for the specified or current account.
+
+    Args:
+        account_name: Account name from credentials.json, or None for current account
+
+    Returns:
+        Ad account ID (act_xxx format) if available, None otherwise
+    """
+    # Try credential manager first
+    try:
+        credential_manager = get_credential_manager()
+        if credential_manager.accounts:
+            account_id = credential_manager.get_account_id(account_name)
+            logger.debug(f"Using account_id from credential_manager: {account_id}")
+            return account_id
+    except AccountNotFoundError as e:
+        logger.warning(f"Account not found in credential_manager: {e}")
+    except CredentialError as e:
+        logger.debug(f"Credential manager error (falling back to ENV): {e}")
+
+    # Fall back to environment variable
+    env_account_id = os.environ.get("META_AD_ACCOUNT_ID")
+    if env_account_id:
+        logger.debug(f"Using account_id from META_AD_ACCOUNT_ID: {env_account_id}")
+        return env_account_id
+
+    return None 

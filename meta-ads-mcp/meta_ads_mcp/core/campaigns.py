@@ -4,6 +4,7 @@ import json
 from typing import List, Optional, Dict, Any, Union
 from .api import meta_api_tool, make_api_request
 from .pagination import fetch_all_pages
+from .credentials import get_credential_manager
 
 # Type alias for budget values that can be int (cents) or empty string (to remove)
 BudgetValue = Union[int, str, None]
@@ -11,10 +12,42 @@ from .accounts import get_ad_accounts
 from .server import mcp_server
 
 
+def _resolve_account_id(account_id: Optional[str], account_name: Optional[str]) -> Optional[str]:
+    """
+    Resolve account_id from account_name if provided.
+
+    Args:
+        account_id: Explicit account ID (takes precedence)
+        account_name: Named account from credentials.json
+
+    Returns:
+        Resolved account ID, or None if not found
+    """
+    if account_id:
+        return account_id
+
+    if account_name:
+        try:
+            credential_manager = get_credential_manager()
+            return credential_manager.get_account_id(account_name)
+        except Exception:
+            pass
+
+    # Try to get from current account
+    try:
+        credential_manager = get_credential_manager()
+        return credential_manager.get_account_id()
+    except Exception:
+        pass
+
+    return None
+
+
 @mcp_server.tool()
 @meta_api_tool
 async def get_campaigns(
-    account_id: str,
+    account_id: Optional[str] = None,
+    account_name: Optional[str] = None,
     access_token: Optional[str] = None,
     limit: int = 50,
     status_filter: str = "",
@@ -35,7 +68,8 @@ async def get_campaigns(
     in the API call (currently not exposed by this tool's parameters).
 
     Args:
-        account_id: Meta Ads account ID (format: act_XXXXXXXXX)
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX). Optional if account_name is provided.
+        account_name: Named account from credentials.json. If provided, account_id is derived from it.
         access_token: Meta API access token (optional - will use cached token if not provided)
         limit: Maximum number of campaigns to return (default: 50)
         status_filter: Filter by effective status (e.g., 'ACTIVE', 'PAUSED', 'ARCHIVED').
@@ -57,7 +91,10 @@ async def get_campaigns(
                         in the specified time range. Also includes spend metrics in the response.
                         (default: True)
     """
-    # Require explicit account_id
+    # Resolve account_id from account_name if needed
+    account_id = _resolve_account_id(account_id, account_name)
+
+    # Require account_id
     if not account_id:
         return json.dumps({"error": "No account ID specified"}, indent=2)
 

@@ -999,3 +999,270 @@ Implemented critical stability and security fixes based on comprehensive code au
 | `31aea3c` | Add git history to progress documentation |
 | `a92f664` | Complete Meta Ads MCP setup (Steps 5-6) |
 | `1f28ac2` | Initial commit: Meta Ads MCP server setup |
+
+---
+
+## Multi-Credential Architecture Implementation (2026-01-22)
+
+### Phase 1: Core Infrastructure ✅
+
+**Completed:** 2026-01-22
+**Plan Reference:** `memory-bank/multi-credential-plan-v2.md`
+
+Implemented the core modules for multi-tenant credential management supporting 3 API keys from 3 Business Managers accessing up to 10 ad accounts.
+
+#### Files Created
+
+| File | Purpose | Lines |
+|------|---------|-------|
+| `meta_ads_mcp/core/credentials.py` | Multi-tenant credential manager with token routing | ~350 |
+| `meta_ads_mcp/core/rate_limiter.py` | Per-key rate limiting with decay model | ~230 |
+| `meta_ads_mcp/core/errors.py` | Meta API error classification and handling | ~180 |
+| `meta_ads_mcp/core/preflight.py` | Startup validation for tokens and accounts | ~300 |
+
+#### Key Components Implemented
+
+**CredentialManager (`credentials.py`):**
+- Singleton pattern for global credential state
+- Platform-specific credentials.json path resolution (macOS/Windows/Linux)
+- Schema v2 validation with api_keys and accounts sections
+- Token routing: account_name → api_key → access_token
+- Backward compatibility: falls back to .env if no credentials.json
+- Token expiration monitoring with 7-day warning threshold
+- Account listing and session-based switching
+
+**RateLimiter (`rate_limiter.py`):**
+- Per-key rate tracking (not per-account, since accounts share keys)
+- Two tiers: development (60/5min) and standard (9000/5min)
+- Score-based system with time decay
+- Automatic blocking when limits exceeded
+- Thread-safe singleton with locking
+
+**Error Classification (`errors.py`):**
+- Maps Meta error codes to action types (RETRY, RATE_LIMIT, AUTH_ERROR, etc.)
+- MetaApiError exception with is_retryable, action, max_retries properties
+- Covers 11 common Meta error codes with appropriate handling
+- to_dict() for JSON serialization
+
+**Preflight Validation (`preflight.py`):**
+- Async validation of all tokens via /me endpoint
+- Permission checking (requires ads_read)
+- Account accessibility validation via /act_{id}
+- Account status mapping (ACTIVE, DISABLED, etc.)
+- Parallel validation for performance
+- Formatted output for CLI display
+
+#### Validation Results
+
+- ✅ All 4 modules pass Python syntax check
+- ✅ All 4 modules pass IDE diagnostics (no errors)
+- ✅ Basic functional tests pass:
+  - Error classification correctly identifies auth/rate-limit/server errors
+  - RateLimiter correctly tracks calls and blocks at limits
+  - CredentialManager singleton pattern works correctly
+  - All exception classes inherit properly
+
+---
+
+### Phase 2: Integration ✅
+
+**Completed:** 2026-01-22
+**Plan Reference:** `memory-bank/multi-credential-plan-v2.md`
+
+Integrated the credential manager and rate limiter into the existing authentication and API layers.
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `meta_ads_mcp/core/auth.py` | Added credential_manager imports, `get_access_token_for_account()`, `get_ad_account_id_for_account()` |
+| `meta_ads_mcp/core/api.py` | Updated `meta_api_tool` decorator with rate limiting, account_name support |
+| `meta_ads_mcp/core/campaigns.py` | Added `_resolve_account_id()` helper, `account_name` parameter to `get_campaigns()` |
+| `meta_ads_mcp/core/__init__.py` | Added import for `account_tools` module |
+
+#### Files Created
+
+| File | Purpose |
+|------|---------|
+| `meta_ads_mcp/core/account_tools.py` | New MCP tools for multi-tenant management |
+
+#### New MCP Tools Added
+
+| Tool | Description |
+|------|-------------|
+| `list_configured_accounts()` | List all accounts with metadata and expiration alerts |
+| `switch_account(account_name)` | Switch to a different configured account |
+| `get_current_account()` | Get details of the current active account |
+| `get_rate_limit_status()` | Show rate limit status for all API keys |
+| `validate_credentials()` | Run preflight validation on all credentials |
+| `get_token_expiration_status()` | Check token expiration status |
+
+#### Key Integration Points
+
+**auth.py additions:**
+- `get_access_token_for_account(account_name)` - Token routing with credential_manager fallback
+- `get_ad_account_id_for_account(account_name)` - Account ID resolution
+
+**api.py `meta_api_tool` decorator updates:**
+- Extracts `account_name` from kwargs
+- Checks rate limit before API calls
+- Records calls after successful requests
+- Handles RateLimitError with retry_after_seconds
+- Falls back to legacy auth if credential_manager empty
+
+**campaigns.py updates:**
+- `_resolve_account_id(account_id, account_name)` helper function
+- `get_campaigns()` now accepts optional `account_name` parameter
+- Same pattern can be applied to other tools
+
+#### Validation Results
+
+- ✅ All modified files pass Python syntax check
+- ✅ All modified files pass IDE diagnostics (no errors)
+- ✅ CredentialManager integration tested
+- ✅ RateLimiter integration tested
+- ✅ Account resolution logic verified
+
+---
+
+### Phase 3: Server Integration ✅
+
+**Completed:** 2026-01-22
+**Plan Reference:** `memory-bank/multi-credential-plan-v2.md`
+
+Integrated credential management into server startup with preflight validation and backward compatibility.
+
+#### Files Modified
+
+| File | Changes |
+|------|---------|
+| `meta_ads_mcp/core/server.py` | Added `run_startup_checks()` async function, startup_checks() sync wrapper, integrated into main() |
+
+#### Key Features Implemented
+
+**Startup Preflight Checks:**
+- `run_startup_checks()` - Async function that validates all credentials at server startup
+- `startup_checks()` - Synchronous wrapper for use in main()
+- Validates all API keys via /me endpoint
+- Verifies account accessibility
+- Reports status with formatted output to stderr (safe for stdio transport)
+- Handles graceful degradation if checks fail
+
+**Token Expiration Alerting:**
+- Checks for tokens expiring within 7 days at startup
+- Displays warning message with affected accounts
+- Uses stderr for output to preserve MCP protocol
+
+**Backward Compatibility:**
+- Falls back to .env mode when no credentials.json present
+- Works with legacy META_ACCESS_TOKEN + META_AD_ACCOUNT_ID environment variables
+- Creates single "default" account in legacy mode
+- All 4 compatibility tests passed:
+  - No credentials: 0 accounts
+  - Legacy .env mode: 1 account 'default'
+  - Token routing in legacy mode: correct token returned
+  - Current account in legacy mode: 'default'
+
+#### Validation Results
+
+- ✅ All modified files pass Python syntax check
+- ✅ All modified files pass IDE diagnostics (no errors)
+- ✅ Backward compatibility tests all pass
+- ⚠️ Full pytest cannot run (Python 3.9 venv, MCP requires 3.10+)
+
+#### Test Environment Fix
+
+Upgraded venv from Python 3.9.6 to Python 3.12.12 (via Homebrew) since MCP requires Python 3.10+.
+
+```bash
+brew install python@3.12
+rm -rf venv
+/opt/homebrew/bin/python3.12 -m venv venv
+./venv/bin/pip install -e .
+```
+
+**Test Results:** 350 passed, 9 skipped, 2 deselected, 9 warnings in 2.49s
+
+---
+
+### Phase 4: Testing ✅
+
+**Completed:** 2026-01-22
+
+Created comprehensive unit tests for all new multi-credential modules.
+
+#### Test Files Created
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `tests/test_credentials.py` | 35 | CredentialManager, token routing, account management, expiration monitoring |
+| `tests/test_rate_limiter.py` | 26 | Tier configs, blocking, decay, thread safety |
+| `tests/test_errors.py` | 30 | Error classification, MetaApiError, action mapping |
+| `tests/test_preflight.py` | 23 | Token validation, account validation, result formatting |
+| `tests/test_account_tools.py` | 18 | MCP tools for account management |
+
+**Total new tests: 132**
+
+#### Bug Fixed During Testing
+
+**File:** `meta_ads_mcp/core/rate_limiter.py`
+**Issue:** `get_all_status()` called `get_key_status()` while holding `self._lock`, causing deadlock with non-reentrant Lock
+**Fix:** Changed `threading.Lock()` to `threading.RLock()` for re-entrant locking
+
+#### Final Test Results
+
+```
+482 passed, 9 skipped, 2 deselected, 11 warnings in 0.75s
+```
+
+(Up from 350 tests before Phase 4)
+
+---
+
+### Phase 5: Documentation ✅
+
+**Completed:** 2026-01-22
+
+Updated README.md with comprehensive multi-account setup documentation and troubleshooting guide.
+
+#### Documentation Added to README.md
+
+**Multi-Account Setup Section:**
+- Platform-specific credentials.json file locations (macOS, Windows, Linux)
+- Complete JSON schema example with api_keys and accounts sections
+- Configuration options tables for API keys and accounts
+- New MCP tools table (6 account management tools)
+- Backward compatibility note for .env fallback
+
+**Multi-Account Troubleshooting Section:**
+- 6 common error scenarios with symptoms, causes, and solutions:
+  - No credentials found
+  - Invalid token for API key
+  - Account not accessible
+  - Rate limit exceeded
+  - Token expiring soon
+  - Account not found
+
+#### Total Documentation Added
+
+~150 lines of new documentation covering:
+- Configuration file format and location
+- All configuration options
+- New tool descriptions
+- Error troubleshooting guide
+
+---
+
+## Implementation Complete
+
+All 5 phases of the Multi-Credential Architecture implementation completed:
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Core Infrastructure (credentials, rate limiter, errors, preflight) | ✅ |
+| Phase 2 | Integration (auth, api decorator, campaigns, account tools) | ✅ |
+| Phase 3 | Server Integration (startup checks, backward compatibility) | ✅ |
+| Phase 4 | Testing (132 new tests, bug fixes) | ✅ |
+| Phase 5 | Documentation (README updates, troubleshooting guide) | ✅ |
+
+**Final Test Count:** 482 passed (up from 350 before implementation)

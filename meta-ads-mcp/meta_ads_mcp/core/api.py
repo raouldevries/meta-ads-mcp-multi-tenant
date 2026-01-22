@@ -6,9 +6,14 @@ import httpx
 import functools
 import os
 from . import auth
-from .auth import auth_manager
+from .auth import auth_manager, get_access_token_for_account
 from .utils import logger
 from .retry import MetaApiError, parse_meta_error, with_retry
+
+# Import credential manager and rate limiter for multi-tenant support
+from .credentials import get_credential_manager, AccountNotFoundError, CredentialError
+from .rate_limiter import get_rate_limiter, RateLimitError
+from .errors import ErrorAction
 
 # API Version Configuration
 # Can be overridden via META_API_VERSION environment variable
@@ -247,9 +252,17 @@ async def make_api_request(
 
 # Generic wrapper for all Meta API tools
 def meta_api_tool(func):
-    """Decorator for Meta API tools that handles authentication and error handling."""
+    """
+    Decorator for Meta API tools that handles authentication, rate limiting, and error handling.
+
+    Supports multi-tenant credential management via account_name parameter.
+    """
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
+        # Track key for rate limiting
+        key_name = None
+        key_tier = "standard"
+
         try:
             # Log function call
             logger.debug(f"Function call: {func.__name__}")
@@ -257,12 +270,56 @@ def meta_api_tool(func):
             # Log kwargs without sensitive info
             safe_kwargs = {k: ('***TOKEN***' if k == 'access_token' else v) for k, v in kwargs.items()}
             logger.debug(f"Kwargs: {safe_kwargs}")
-            
+
+            # === Multi-Tenant Credential Support ===
+            # Extract account_name if provided
+            account_name = kwargs.get('account_name')
+
+            # Try to get credentials from credential manager first
+            credential_manager = get_credential_manager()
+            rate_limiter = get_rate_limiter()
+
+            if credential_manager.accounts:
+                # Multi-tenant mode: use credential manager
+                try:
+                    # Get the API key config for rate limiting
+                    key_config = credential_manager.get_key_for_account(account_name)
+                    key_name = key_config.name
+                    key_tier = key_config.tier
+
+                    # Check rate limit BEFORE making the call
+                    try:
+                        rate_limiter.check_rate_limit(key_name, key_tier)
+                    except RateLimitError as e:
+                        logger.warning(f"Rate limit exceeded for key '{e.key_name}'")
+                        return json.dumps({
+                            "error": "Rate limit exceeded",
+                            "key": e.key_name,
+                            "retry_after_seconds": e.retry_after_seconds,
+                            "message": f"Too many requests. Please wait {e.retry_after_seconds} seconds before retrying."
+                        }, indent=2)
+
+                    # Get token if not provided
+                    if 'access_token' not in kwargs or not kwargs['access_token']:
+                        kwargs['access_token'] = credential_manager.get_token_for_account(account_name)
+                        logger.debug(f"Using token from credential_manager for account: {account_name or 'current'}")
+
+                except AccountNotFoundError as e:
+                    logger.error(f"Account not found: {e}")
+                    return json.dumps({
+                        "error": str(e),
+                        "available_accounts": list(credential_manager.accounts.keys())
+                    }, indent=2)
+                except CredentialError as e:
+                    logger.error(f"Credential error: {e}")
+                    return json.dumps({"error": str(e)}, indent=2)
+
+            # === Legacy Auth Flow (fallback) ===
             # Log app ID information
             app_id = auth_manager.app_id
             logger.debug(f"Current app_id: {app_id}")
             logger.debug(f"META_APP_ID env var: {os.environ.get('META_APP_ID')}")
-            
+
             # If access_token is not in kwargs or not kwargs['access_token'], try to get it from auth_manager
             if 'access_token' not in kwargs or not kwargs['access_token']:
                 try:
@@ -286,22 +343,22 @@ def meta_api_tool(func):
                     # Add stack trace for better debugging
                     import traceback
                     logger.error(f"Stack trace: {traceback.format_exc()}")
-            
+
             # Final validation - if we still don't have a valid token, return authentication required
             if 'access_token' not in kwargs or not kwargs['access_token']:
                 logger.warning("No access token available, authentication needed")
-                
+
                 # Add more specific troubleshooting information
                 auth_url = auth_manager.get_auth_url()
                 app_id = auth_manager.app_id
                 using_pipeboard = auth_manager.use_pipeboard
-                
+
                 logger.error("TOKEN VALIDATION SUMMARY:")
                 logger.error(f"- Current app_id: '{app_id}'")
                 logger.error(f"- Environment META_APP_ID: '{os.environ.get('META_APP_ID', 'Not set')}'")
                 logger.error(f"- Pipeboard API token configured: {'Yes' if os.environ.get('PIPEBOARD_API_TOKEN') else 'No'}")
                 logger.error(f"- Using Pipeboard authentication: {'Yes' if using_pipeboard else 'No'}")
-                
+
                 # Check for common configuration issues - but only if not using Pipeboard
                 if not using_pipeboard and (app_id == "YOUR_META_APP_ID" or not app_id):
                     logger.error("ISSUE DETECTED: No valid Meta App ID configured")
@@ -309,7 +366,7 @@ def meta_api_tool(func):
                 elif using_pipeboard:
                     logger.error("ISSUE DETECTED: Pipeboard authentication configured but no valid token available")
                     logger.error("ACTION REQUIRED: Complete authentication via Pipeboard service")
-                
+
                 # Provide different guidance based on authentication method
                 if using_pipeboard:
                     return json.dumps({
@@ -347,16 +404,27 @@ def meta_api_tool(func):
                             }
                         }
                     }, indent=2)
-                
+
             # Call the original function
             result = await func(*args, **kwargs)
-            
+
+            # Record successful call for rate limiting
+            if key_name:
+                rate_limiter.record_call(key_name, key_tier)
+
             # If the result is a string (JSON), try to parse it to check for errors
             if isinstance(result, str):
                 try:
                     result_dict = json.loads(result)
                     if "error" in result_dict:
                         logger.error(f"Error in API response: {result_dict['error']}")
+
+                        # Check for rate limit errors from Meta and record them
+                        error_code = result_dict.get("error", {}).get("code")
+                        if key_name and error_code in [4, 17, 32, 613]:
+                            retry_after = result_dict.get("error", {}).get("retry_after")
+                            rate_limiter.record_rate_limit_error(key_name, retry_after)
+
                         # If this is an app ID error, log more details
                         if isinstance(result_dict.get("details", {}).get("error", {}), dict):
                             error_obj = result_dict["details"]["error"]
@@ -378,14 +446,14 @@ def meta_api_tool(func):
                 except Exception:
                     # Not JSON or other parsing error, wrap it in a dictionary
                     return json.dumps({"data": result}, indent=2)
-            
+
             # If result is already a dictionary, ensure it's properly serialized
             if isinstance(result, dict):
                 return json.dumps(result, indent=2)
-            
+
             return result
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
             return json.dumps({"error": str(e)}, indent=2)
-    
+
     return wrapper 

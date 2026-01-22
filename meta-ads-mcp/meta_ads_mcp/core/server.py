@@ -2,6 +2,7 @@
 
 from mcp.server.fastmcp import FastMCP
 import argparse
+import asyncio
 import os
 import sys
 import webbrowser
@@ -15,8 +16,77 @@ import time
 from .api import get_api_version
 from .presets import INSIGHT_PRESETS, DEFAULT_TIME_RANGES, DEFAULT_LIMITS
 
+# Import credential manager and preflight for multi-tenant support
+from .credentials import get_credential_manager
+from .preflight import run_preflight_checks, format_preflight_result, PreflightStatus
+
 # Initialize FastMCP server
 mcp_server = FastMCP("meta-ads")
+
+
+async def run_startup_checks() -> bool:
+    """
+    Run startup validation checks for multi-tenant credentials.
+
+    Validates:
+    - Token expiration alerts (warns if tokens expire within 7 days)
+    - Preflight checks (token validity, account access)
+
+    Returns:
+        True if all checks passed or only warnings, False if critical errors
+    """
+    credential_manager = get_credential_manager()
+
+    # Skip if no multi-tenant credentials configured (using legacy .env mode)
+    if not credential_manager.accounts:
+        logger.info("No credentials.json found, using legacy .env authentication mode")
+        return True
+
+    logger.info(f"Multi-tenant mode: {len(credential_manager.accounts)} accounts configured")
+    print(f"Multi-tenant mode: {len(credential_manager.accounts)} accounts configured", file=sys.stderr)
+
+    # Check for token expiration alerts
+    alert = credential_manager.check_token_expiration_alerts()
+    if alert:
+        logger.warning(f"Token expiration alerts:\n{alert}")
+        print(f"\n{alert}\n", file=sys.stderr)
+
+    # Run preflight validation
+    logger.info("Running preflight validation...")
+    print("Running preflight validation...", file=sys.stderr)
+
+    try:
+        result = await run_preflight_checks(credential_manager)
+        formatted = format_preflight_result(result)
+
+        if result.status == PreflightStatus.FAILED:
+            logger.error(f"Preflight validation FAILED:\n{formatted}")
+            print(f"\n{formatted}\n", file=sys.stderr)
+            print("Some accounts may not work. Run 'validate_credentials' tool to see details.", file=sys.stderr)
+            return False
+        elif result.status == PreflightStatus.WARNING:
+            logger.warning(f"Preflight validation passed with warnings:\n{formatted}")
+            print(f"\n{formatted}\n", file=sys.stderr)
+            return True
+        else:
+            logger.info(f"Preflight validation passed: {len(credential_manager.accounts)} accounts OK")
+            print(f"Preflight validation passed: {len(credential_manager.accounts)} accounts OK", file=sys.stderr)
+            return True
+
+    except Exception as e:
+        logger.error(f"Preflight validation error: {e}")
+        print(f"Preflight validation error: {e}", file=sys.stderr)
+        print("Server will start but some features may not work.", file=sys.stderr)
+        return True  # Don't block startup on validation errors
+
+
+def startup_checks():
+    """Synchronous wrapper for startup checks."""
+    try:
+        return asyncio.run(run_startup_checks())
+    except Exception as e:
+        logger.error(f"Error running startup checks: {e}")
+        return True  # Don't block startup on errors
 
 # Register resource URIs
 mcp_server.resource(uri="meta-ads://resources")(list_resources)
@@ -301,7 +371,10 @@ def main():
     logger.info(f"Final app_id from meta_config: {meta_config.get_app_id()}")
     logger.info(f"Final app_id from auth_manager: {auth_manager.app_id}")
     logger.info(f"ENV META_APP_ID: {os.environ.get('META_APP_ID')}")
-    
+
+    # Run multi-tenant startup checks (token expiration, preflight validation)
+    startup_checks()
+
     # Show version if requested
     if args.version:
         from meta_ads_mcp import __version__
