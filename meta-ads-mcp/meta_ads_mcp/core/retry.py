@@ -6,7 +6,7 @@ with configurable retry counts and delays. Designed for production
 multi-account scenarios where rate limits are common.
 
 Usage:
-    from .retry import with_retry, MetaApiError
+    from .retry import with_retry, MetaApiError, ErrorAction
 
     @with_retry(max_retries=3)
     async def my_api_call():
@@ -16,10 +16,23 @@ Usage:
 import asyncio
 import random
 import logging
+from enum import Enum
 from typing import Callable, TypeVar, Optional, Tuple
 from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+
+class ErrorAction(Enum):
+    """Action to take for a Meta API error."""
+    RETRY = "retry"           # Retry with backoff
+    RATE_LIMIT = "rate_limit" # Record rate limit, block key temporarily
+    AUTH_ERROR = "auth_error" # Token invalid, don't retry
+    PERM_ERROR = "perm_error" # Permission denied, don't retry
+    NOT_FOUND = "not_found"   # Resource doesn't exist
+    BAD_REQUEST = "bad_req"   # Invalid parameters
+    SERVER_ERROR = "server"   # Meta server error, retry
+    UNKNOWN = "unknown"       # Unknown error
 
 T = TypeVar('T')
 
@@ -61,6 +74,36 @@ class RetryConfig:
         504: (2, "Gateway Timeout"),
     }
 
+    # Error code to action mapping for classification
+    ERROR_ACTIONS: dict[int, ErrorAction] = {
+        # Rate limiting
+        4: ErrorAction.RATE_LIMIT,
+        17: ErrorAction.RATE_LIMIT,
+        32: ErrorAction.RATE_LIMIT,
+        341: ErrorAction.RATE_LIMIT,
+        613: ErrorAction.RATE_LIMIT,
+        80000: ErrorAction.RATE_LIMIT,
+        80001: ErrorAction.RATE_LIMIT,
+        80002: ErrorAction.RATE_LIMIT,
+        80003: ErrorAction.RATE_LIMIT,
+        80004: ErrorAction.RATE_LIMIT,
+        80005: ErrorAction.RATE_LIMIT,
+        80006: ErrorAction.RATE_LIMIT,
+        80008: ErrorAction.RATE_LIMIT,
+        # Auth errors
+        190: ErrorAction.AUTH_ERROR,
+        # Permission errors
+        10: ErrorAction.PERM_ERROR,
+        200: ErrorAction.PERM_ERROR,
+        294: ErrorAction.PERM_ERROR,
+        # Bad request
+        100: ErrorAction.BAD_REQUEST,
+        # Server errors (retryable)
+        1: ErrorAction.SERVER_ERROR,
+        2: ErrorAction.SERVER_ERROR,
+        368: ErrorAction.RETRY,
+    }
+
     # Backoff configuration
     INITIAL_DELAY_MS = 1000    # 1 second
     MAX_DELAY_MS = 60000       # 60 seconds
@@ -94,6 +137,25 @@ class RetryConfig:
         if status_code and status_code in cls.RETRYABLE_HTTP_STATUS:
             return cls.RETRYABLE_HTTP_STATUS[status_code][1]
         return "Unknown error"
+
+    @classmethod
+    def get_action(cls, error_code: Optional[int] = None, status_code: Optional[int] = None) -> ErrorAction:
+        """Get the recommended action for an error."""
+        if error_code and error_code in cls.ERROR_ACTIONS:
+            return cls.ERROR_ACTIONS[error_code]
+        # HTTP status code based actions
+        if status_code:
+            if status_code == 401 or status_code == 403:
+                return ErrorAction.AUTH_ERROR
+            if status_code == 404:
+                return ErrorAction.NOT_FOUND
+            if status_code == 429:
+                return ErrorAction.RATE_LIMIT
+            if status_code >= 500:
+                return ErrorAction.SERVER_ERROR
+            if status_code >= 400:
+                return ErrorAction.BAD_REQUEST
+        return ErrorAction.UNKNOWN
 
     @classmethod
     def calculate_delay(cls, attempt: int, retry_after: Optional[int] = None) -> float:
@@ -167,6 +229,11 @@ class MetaApiError(Exception):
         """Get human-readable error description."""
         return RetryConfig.get_error_description(self.error_code, self.status_code)
 
+    @property
+    def action(self) -> ErrorAction:
+        """Get the recommended action for this error."""
+        return RetryConfig.get_action(self.error_code, self.status_code)
+
     def __str__(self) -> str:
         parts = [self.message]
         if self.error_code:
@@ -188,6 +255,7 @@ class MetaApiError(Exception):
             "error_type": self.error_type,
             "status_code": self.status_code,
             "is_retryable": self.is_retryable,
+            "action": self.action.value,
             "fbtrace_id": self.fbtrace_id
         }
 

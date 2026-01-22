@@ -13,7 +13,6 @@ from .retry import MetaApiError, parse_meta_error, with_retry
 # Import credential manager and rate limiter for multi-tenant support
 from .credentials import get_credential_manager, AccountNotFoundError, CredentialError
 from .rate_limiter import get_rate_limiter, RateLimitError
-from .errors import ErrorAction
 
 # API Version Configuration
 # Can be overridden via META_API_VERSION environment variable
