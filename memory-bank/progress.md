@@ -140,22 +140,72 @@ Integrated credential management into server startup with preflight validation.
 
 ---
 
-## Creative Analysis Agent (Planned)
+## Creative Analysis Agent (In Progress)
 
 **Plan Reference:** `memory-bank/creative-analysis-plan.md`
-**Status:** Not Started
+**Status:** In Progress
 
 ### Steps Overview
 
 | Step | Description | Status |
 |------|-------------|--------|
-| Step 1 | Core Infrastructure | ⏳ Pending |
+| Step 1 | Core Infrastructure | ✅ |
 | Step 2 | Image Analysis | ⏳ Pending |
 | Step 3 | Video Processing Module | ⏳ Pending |
 | Step 4 | Video Analysis Integration | ⏳ Pending |
 | Step 5 | Main Tools & Insights | ⏳ Pending |
 | Step 6 | Testing | ⏳ Pending |
 | Step 7 | Documentation & Integration | ⏳ Pending |
+
+---
+
+### Step 1: Core Infrastructure ✅
+
+**Completed:** 2026-01-23
+
+Created the main `creative_analysis.py` module with foundational components.
+
+#### File Created
+
+| File | Purpose |
+|------|---------|
+| `meta_ads_mcp/core/creative_analysis.py` | Main creative analysis module (~475 lines) |
+
+#### Components Implemented
+
+| Component | Description |
+|-----------|-------------|
+| `CreativeAnalysisError` | Base exception with details dict |
+| `VideoProcessingError` | Exception for ffmpeg/download errors |
+| `CreativeNotFoundError` | Exception when creative not accessible |
+| `CreativeType` | Enum: IMAGE, VIDEO, CAROUSEL, UNKNOWN |
+| `AnalysisLevel` | Enum: FULL, THUMBNAIL_ONLY, METADATA_ONLY |
+| `CreativeDimensions` | Dataclass for width/height/aspect_ratio |
+| `CreativeContent` | Dataclass for headlines/texts/CTA/link |
+| `VisualAnalysis` | Dataclass for visual analysis results |
+| `PerformanceMetrics` | Dataclass for ad performance metrics |
+| `CreativeAnalysisResult` | Complete analysis output schema |
+
+#### Helper Functions
+
+| Function | Purpose |
+|----------|---------|
+| `_detect_creative_type()` | Detect image/video/carousel from metadata |
+| `_extract_creative_content()` | Extract headlines, body, CTA, link URL |
+| `_fetch_creative_metadata()` | Fetch creative data from Meta API |
+| `_fetch_performance_metrics()` | Fetch ad insights with time range |
+
+#### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_creative_type(ad_id)` | Detect creative type with basic metadata |
+| `get_creative_content(ad_id)` | Extract all text content from creative |
+
+#### Tested With Real API
+
+- Video ad: Correctly detected as VIDEO, extracted 9 headlines, 8 body texts
+- Image ad: Correctly detected as IMAGE, extracted content from asset_feed_spec
 
 ---
 

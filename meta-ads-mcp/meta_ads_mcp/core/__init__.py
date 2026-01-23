@@ -32,6 +32,9 @@ from . import analysis  # Analysis tools optimized for Claude context window
 # Multi-tenant credential management
 from . import account_tools  # list_configured_accounts, switch_account, etc.
 
+# Creative analysis
+from . import creative_analysis  # get_creative_type, get_creative_content, analyze_creative
+
 __all__ = [
     'mcp_server',
     # Retry logic
