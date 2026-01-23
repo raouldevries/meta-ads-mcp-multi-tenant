@@ -21,7 +21,9 @@ mcp-name: co.pipeboard/meta-ads-mcp
 - [Local Installation (Technical Users Only)](#local-installation-technical-users-only)
 - [Features](#features)
 - [Configuration](#configuration)
+  - [Video Analysis System Requirements](#video-analysis-system-requirements)
 - [Available MCP Tools](#available-mcp-tools)
+  - [Creative Analysis Tools](#creative-analysis-tools)
 - [Licensing](#licensing)
 - [Privacy and Security](#privacy-and-security)
 - [Testing](#testing)
@@ -109,6 +111,7 @@ Meta Ads MCP also supports a local streamable HTTP transport, allowing you to ru
 ## Features
 
 - **AI-Powered Campaign Analysis**: Let your favorite LLM analyze your campaigns and provide actionable insights on performance
+- **Creative Analysis**: Analyze image and video ad creatives with performance metrics, retention analysis, and AI-generated insights
 - **Strategic Recommendations**: Receive data-backed suggestions for optimizing ad spend, targeting, and creative content
 - **Automated Monitoring**: Ask any MCP-compatible LLM to track performance metrics and alert you about significant changes
 - **Budget Optimization**: Get recommendations for reallocating budget to better-performing ad sets
@@ -247,6 +250,48 @@ When using multi-account configuration, these additional tools are available:
 #### Backward Compatibility
 
 If no `credentials.json` exists, the server falls back to environment variables (`META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`) with a single "default" account. Existing single-account setups continue to work unchanged.
+
+### Video Analysis System Requirements
+
+The creative analysis tools support optional video frame extraction and subtitle detection. These features require external system dependencies:
+
+#### Required for Video Frame Extraction
+- **ffmpeg** >= 4.0 - Video processing and frame extraction
+
+#### Required for Subtitle/Text Detection
+- **tesseract-ocr** >= 4.0 - Optical character recognition
+
+#### Installation
+
+**macOS (Homebrew):**
+```bash
+brew install ffmpeg tesseract
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install ffmpeg tesseract-ocr
+```
+
+**Windows:**
+```bash
+# Using Chocolatey
+choco install ffmpeg tesseract
+```
+
+#### Verification
+```bash
+ffmpeg -version    # Should show version >= 4.0
+tesseract --version # Should show version >= 4.0
+```
+
+#### Graceful Degradation
+
+If ffmpeg or tesseract are not installed:
+- Video analysis will still work with metadata and retention metrics
+- Frame extraction features (`extract_frames=True`) will be skipped with a warning
+- Subtitle detection (`extract_subtitles=True`) will be skipped with a warning
+- No errors will be thrown - analysis continues with available data
 
 ### Available MCP Tools
 
@@ -556,6 +601,85 @@ If no `credentials.json` exists, the server falls back to environment variables 
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
       - `query`: Search query string (e.g., "Injury Payouts pages", "active campaigns")
     - Returns: List of matching record IDs in ChatGPT-compatible format
+
+### Creative Analysis Tools
+
+30. `mcp_meta_ads_get_creative_type`
+    - Detect whether an ad uses image, video, or carousel creative
+    - Inputs:
+      - `ad_id`: Meta Ads ad ID
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Creative type (image/video/carousel) with basic metadata
+
+31. `mcp_meta_ads_get_creative_content`
+    - Extract all text content from an ad creative
+    - Inputs:
+      - `ad_id`: Meta Ads ad ID
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Headlines, body text, descriptions, CTA, and link URL
+
+32. `mcp_meta_ads_analyze_image_creative`
+    - Analyze image ad with performance metrics and benchmarks
+    - Inputs:
+      - `ad_id`: Meta Ads ad ID
+      - `time_range`: Time range for metrics (default: "last_30d")
+      - `include_benchmarks`: Compare to account benchmarks (default: true)
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Image dimensions, performance metrics, benchmark comparison
+
+33. `mcp_meta_ads_analyze_video_creative`
+    - Analyze video ad with retention metrics and dropoff analysis
+    - Inputs:
+      - `ad_id`: Meta Ads ad ID
+      - `time_range`: Time range for metrics (default: "last_30d")
+      - `include_benchmarks`: Compare to account benchmarks (default: true)
+      - `extract_frames`: Extract video frames with ffmpeg (default: false)
+      - `extract_subtitles`: Run OCR on frames with tesseract (default: false)
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Video retention curve, thruplay rate, dropoff points, performance metrics
+
+34. `mcp_meta_ads_analyze_creative`
+    - Unified creative analysis - auto-detects type and routes to image/video analysis
+    - Inputs:
+      - `ad_id`: Meta Ads ad ID
+      - `time_range`: Time range for metrics (default: "last_30d")
+      - `include_benchmarks`: Compare to account benchmarks (default: true)
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Complete analysis based on creative type
+
+35. `mcp_meta_ads_analyze_account_creatives`
+    - Batch analysis of all creatives in an account
+    - Inputs:
+      - `account_id`: Meta Ads account ID (format: act_XXXXXXXXX)
+      - `time_range`: Time range for metrics (default: "last_30d")
+      - `limit`: Maximum creatives to analyze (default: 20)
+      - `min_spend`: Minimum spend filter (default: 1.0)
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Top/bottom performers, summary statistics by creative type
+
+36. `mcp_meta_ads_get_creative_insights`
+    - Get AI-generated insights for a creative
+    - Inputs:
+      - `ad_id`: Meta Ads ad ID
+      - `time_range`: Time range for metrics (default: "last_30d")
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Strengths, weaknesses, and prioritized recommendations
+
+37. `mcp_meta_ads_get_account_benchmarks`
+    - Get account-level performance benchmarks
+    - Inputs:
+      - `account_id`: Meta Ads account ID (format: act_XXXXXXXXX)
+      - `time_range`: Time range for metrics (default: "last_30d")
+      - `access_token` (optional): Meta API access token
+      - `account_name` (optional): Account name for multi-tenant setup
+    - Returns: Average CTR, CPC, CPM for account
 
 ## Licensing
 
