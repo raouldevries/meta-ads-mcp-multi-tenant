@@ -71,6 +71,145 @@ class AnalysisLevel(str, Enum):
 
 
 # =============================================================================
+# Video Analysis Methodology
+# =============================================================================
+#
+# When analyzing video creatives, follow this structured approach:
+#
+# 1. SUBTITLE EXTRACTION (What is being said)
+#    - Extract EVERY subtitle from every frame (1 frame per second minimum)
+#    - Focus on identifying:
+#      * Hook (0-3 seconds): What grabs attention?
+#      * Angle/Promise: What benefit/outcome is promised?
+#      * Social Proof: Testimonials, results, transformations
+#      * Call to Action: What action is requested?
+#    - Clean OCR text and group by timestamp
+#    - Map subtitles to retention curve to identify content-performance correlation
+#
+# 2. FRAME VISUAL ANALYSIS (What is in the frame)
+#    For each key frame, analyze:
+#      * Person: Man/Woman, Young/Middle-aged/Old
+#      * Expression: Smiling, Talking, Neutral, Excited
+#      * Eye Contact: Looking at camera (direct) or away (candid)
+#      * Setting: Indoor/Outdoor, Gym/Home/Office/Nature
+#      * Scene Type: Talking head, B-roll, Product shot, Text overlay
+#      * Motion: Static, Moving, Fast cuts
+#      * Text Overlays: Any on-screen text/graphics
+#
+# 3. PERFORMANCE CORRELATION
+#    Combine visual + subtitle analysis with:
+#      * Retention curve (where do viewers drop off?)
+#      * CTR, CPC, CPM benchmarks
+#      * Video engagement metrics (thruplay, watch time)
+#    Map specific content to specific drop-off points
+#
+# 4. INSIGHTS & RECOMMENDATIONS
+#    Based on the analysis, identify:
+#      * Key Issues: What's causing poor performance?
+#      * Strengths: What's working well?
+#      * Recommendations: Specific, actionable improvements
+#        - Hook improvements
+#        - Pacing/structure changes
+#        - Visual variety suggestions
+#        - CTA timing optimization
+#
+# =============================================================================
+
+
+@dataclass
+class FrameVisualAnalysis:
+    """Visual analysis of a single video frame."""
+    timestamp: float
+
+    # Person analysis
+    person_visible: bool = False
+    person_gender: Optional[str] = None  # "male", "female", "unknown"
+    person_age_group: Optional[str] = None  # "young", "middle", "old"
+    person_expression: Optional[str] = None  # "smiling", "talking", "neutral", "excited"
+    eye_contact: Optional[str] = None  # "direct" (at camera), "away", "none"
+
+    # Setting analysis
+    setting: Optional[str] = None  # "indoor", "outdoor"
+    location_type: Optional[str] = None  # "gym", "home", "office", "nature", "studio"
+
+    # Scene analysis
+    scene_type: Optional[str] = None  # "talking_head", "broll", "product", "text_overlay", "testimonial"
+    has_text_overlay: bool = False
+    text_overlay_content: Optional[str] = None
+    is_scene_change: bool = False
+
+    # Motion
+    motion_level: Optional[str] = None  # "static", "slow", "dynamic", "fast_cuts"
+
+
+@dataclass
+class SubtitleSegment:
+    """A subtitle/text segment extracted from video."""
+    start_time: float
+    end_time: float
+    text: str
+    confidence: float
+
+    # Content classification
+    content_type: Optional[str] = None  # "hook", "benefit", "social_proof", "cta", "story", "question"
+    is_hook: bool = False  # First 3 seconds
+    is_key_message: bool = False  # Important benefit/outcome
+
+
+@dataclass
+class ContentRetentionMapping:
+    """Maps content to retention/performance data."""
+    timestamp: float
+    subtitle_text: Optional[str]
+    frame_description: Optional[str]
+    retention_percent: float
+    drop_from_previous: float
+
+    # Performance assessment
+    performance_status: str  # "good", "warning", "critical"
+    issue_detected: Optional[str] = None
+
+
+@dataclass
+class VideoCreativeAnalysis:
+    """Complete video creative analysis result."""
+    # Basic info
+    ad_id: str
+    ad_name: str
+    video_duration: float
+
+    # Subtitle analysis
+    subtitles: List[SubtitleSegment]
+    hook_text: Optional[str]  # What's said in first 3 seconds
+    key_messages: List[str]  # Main benefits/outcomes mentioned
+    cta_text: Optional[str]  # Call to action text
+
+    # Visual analysis
+    frame_analyses: List[FrameVisualAnalysis]
+    primary_speaker: Optional[Dict[str, Any]]  # Gender, age, etc. of main person
+    scene_variety_score: float  # 0-1, higher = more visual variety
+
+    # Performance correlation
+    content_retention_map: List[ContentRetentionMapping]
+    critical_dropoff_content: List[Dict[str, Any]]  # What content appears at dropoff points
+
+    # Insights
+    key_issues: List[Dict[str, Any]]
+    strengths: List[str]
+    recommendations: List[Dict[str, Any]]
+
+
+# Video analysis configuration
+VIDEO_ANALYSIS_CONFIG = {
+    "min_frames_per_second": 1,  # Extract at least 1 frame/second
+    "hook_window_seconds": 3,  # First 3 seconds = hook
+    "critical_dropoff_threshold": 20,  # % drop that's considered critical
+    "ocr_confidence_threshold": 0.4,  # Minimum OCR confidence
+    "subtitle_region_percent": 0.30,  # Bottom 30% of frame for subtitles
+}
+
+
+# =============================================================================
 # Output Schemas (TypedDicts/Dataclasses)
 # =============================================================================
 
@@ -1083,6 +1222,359 @@ def _identify_dropoff_points(
         prev_rate = current_rate
 
     return dropoffs
+
+
+# =============================================================================
+# Detailed Video Content Analysis Functions
+# =============================================================================
+
+
+def _classify_subtitle_content(text: str, timestamp: float, video_duration: float) -> Dict[str, Any]:
+    """
+    Classify subtitle content type based on text and timing.
+
+    Args:
+        text: The subtitle text
+        timestamp: When this text appears
+        video_duration: Total video duration
+
+    Returns:
+        Dict with content_type and flags
+    """
+    text_lower = text.lower()
+    result = {
+        "content_type": "story",  # Default
+        "is_hook": timestamp <= VIDEO_ANALYSIS_CONFIG["hook_window_seconds"],
+        "is_key_message": False,
+        "is_cta": False
+    }
+
+    # Check for CTA patterns (usually near end)
+    cta_keywords = ["boek", "book", "klik", "click", "probeer", "try", "start", "begin",
+                    "gratis", "free", "nu", "now", "vandaag", "today", "proefles", "aanmelden"]
+    if any(kw in text_lower for kw in cta_keywords) and timestamp > video_duration * 0.7:
+        result["content_type"] = "cta"
+        result["is_cta"] = True
+
+    # Check for question patterns (often hooks)
+    if "?" in text or text_lower.startswith(("waarom", "why", "hoe", "how", "wat", "what", "ken je", "wist je")):
+        result["content_type"] = "question"
+
+    # Check for social proof / testimonial
+    proof_keywords = ["resultaat", "result", "kilo", "kg", "maand", "month", "jaar", "year",
+                      "perfect", "geweldig", "amazing", "fantastisch", "beste", "best"]
+    if any(kw in text_lower for kw in proof_keywords):
+        result["content_type"] = "social_proof"
+        result["is_key_message"] = True
+
+    # Check for benefit/outcome mentions
+    benefit_keywords = ["energie", "energy", "fit", "sterk", "strong", "gezond", "healthy",
+                        "skiën", "skiing", "sporten", "exercise", "afgevallen", "lost weight",
+                        "bereikt", "achieved", "gelukt", "succeeded"]
+    if any(kw in text_lower for kw in benefit_keywords):
+        result["content_type"] = "benefit"
+        result["is_key_message"] = True
+
+    return result
+
+
+def _extract_subtitles_detailed(
+    raw_subtitles: List[Dict[str, Any]],
+    video_duration: float
+) -> List[SubtitleSegment]:
+    """
+    Process raw subtitle detections into structured SubtitleSegments.
+
+    Args:
+        raw_subtitles: List of dicts with text, timestamp, confidence
+        video_duration: Total video duration
+
+    Returns:
+        List of SubtitleSegment objects with classification
+    """
+    segments = []
+    prev_end = 0.0
+
+    for i, sub in enumerate(raw_subtitles):
+        text = sub.get("text", "").strip()
+        if not text or len(text) < 3:
+            continue
+
+        timestamp = sub.get("timestamp", 0.0)
+        confidence = sub.get("confidence", 0.0)
+
+        # Estimate end time (next subtitle or +2 seconds)
+        if i + 1 < len(raw_subtitles):
+            end_time = raw_subtitles[i + 1].get("timestamp", timestamp + 2.0)
+        else:
+            end_time = min(timestamp + 2.0, video_duration)
+
+        # Classify content
+        classification = _classify_subtitle_content(text, timestamp, video_duration)
+
+        segment = SubtitleSegment(
+            start_time=timestamp,
+            end_time=end_time,
+            text=text,
+            confidence=confidence,
+            content_type=classification["content_type"],
+            is_hook=classification["is_hook"],
+            is_key_message=classification["is_key_message"]
+        )
+        segments.append(segment)
+
+    return segments
+
+
+def _create_content_retention_mapping(
+    subtitles: List[SubtitleSegment],
+    retention_curve: List[int],
+    video_duration: float
+) -> List[ContentRetentionMapping]:
+    """
+    Map content (subtitles/frames) to retention data.
+
+    Args:
+        subtitles: Processed subtitle segments
+        retention_curve: List of retention percentages at intervals
+        video_duration: Total video duration
+
+    Returns:
+        List of ContentRetentionMapping objects
+    """
+    mappings = []
+
+    if not retention_curve:
+        return mappings
+
+    # Calculate interval between retention data points
+    interval = video_duration / len(retention_curve) if len(retention_curve) > 0 else 1.0
+
+    prev_retention = 100.0
+
+    for i, retention in enumerate(retention_curve):
+        timestamp = i * interval
+
+        # Find subtitle at this timestamp
+        subtitle_text = None
+        for sub in subtitles:
+            if sub.start_time <= timestamp < sub.end_time:
+                subtitle_text = sub.text
+                break
+
+        drop = prev_retention - retention
+
+        # Determine status
+        if retention >= 50:
+            status = "good"
+        elif retention >= 20:
+            status = "warning"
+        else:
+            status = "critical"
+
+        # Detect issues
+        issue = None
+        if drop >= VIDEO_ANALYSIS_CONFIG["critical_dropoff_threshold"]:
+            if timestamp <= 3:
+                issue = "Critical hook failure - viewers leaving immediately"
+            elif timestamp <= 7:
+                issue = "Early content not engaging enough"
+            else:
+                issue = f"Significant drop at {timestamp:.1f}s - content may be losing interest"
+
+        mapping = ContentRetentionMapping(
+            timestamp=timestamp,
+            subtitle_text=subtitle_text,
+            frame_description=None,  # To be filled by visual analysis
+            retention_percent=retention,
+            drop_from_previous=round(drop, 1),
+            performance_status=status,
+            issue_detected=issue
+        )
+        mappings.append(mapping)
+
+        prev_retention = retention
+
+    return mappings
+
+
+def _identify_critical_dropoff_content(
+    content_map: List[ContentRetentionMapping],
+    subtitles: List[SubtitleSegment]
+) -> List[Dict[str, Any]]:
+    """
+    Identify what content appears at critical drop-off points.
+
+    Args:
+        content_map: Content-retention mapping
+        subtitles: All subtitles
+
+    Returns:
+        List of critical content moments with analysis
+    """
+    critical_content = []
+
+    for mapping in content_map:
+        if mapping.drop_from_previous >= VIDEO_ANALYSIS_CONFIG["critical_dropoff_threshold"]:
+            # Find surrounding content
+            ts = mapping.timestamp
+            surrounding_subs = [
+                s for s in subtitles
+                if ts - 2 <= s.start_time <= ts + 2
+            ]
+
+            critical_content.append({
+                "timestamp": ts,
+                "retention_before": mapping.retention_percent + mapping.drop_from_previous,
+                "retention_after": mapping.retention_percent,
+                "drop_percent": mapping.drop_from_previous,
+                "content_at_dropoff": mapping.subtitle_text,
+                "surrounding_content": [s.text for s in surrounding_subs],
+                "issue": mapping.issue_detected,
+                "recommendation": _get_dropoff_recommendation(ts, mapping.drop_from_previous)
+            })
+
+    return critical_content
+
+
+def _get_dropoff_recommendation(timestamp: float, drop_percent: float) -> str:
+    """Generate specific recommendation based on dropoff timing."""
+    if timestamp <= 1:
+        return "Thumbnail and first frame aren't stopping the scroll. Test a more attention-grabbing opening visual."
+    elif timestamp <= 3:
+        return "Hook isn't compelling enough. Lead with the outcome/benefit instead of setup. Show don't tell."
+    elif timestamp <= 7:
+        return "Early content is too slow. Add visual variety, faster cuts, or text overlays to maintain interest."
+    elif timestamp <= 15:
+        return "Mid-video sag. This is often where testimonials lose viewers. Front-load the best content."
+    else:
+        return "Late-video drop. Consider a shorter version or move the CTA earlier while viewers are still engaged."
+
+
+def _generate_video_insights_detailed(
+    subtitles: List[SubtitleSegment],
+    content_map: List[ContentRetentionMapping],
+    critical_content: List[Dict[str, Any]],
+    video_duration: float,
+    metrics: Optional[Dict[str, Any]],
+    video_metrics: Optional[Dict[str, Any]],
+    benchmark_comparison: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Generate comprehensive insights from video analysis.
+
+    Returns dict with key_issues, strengths, and recommendations.
+    """
+    insights = {
+        "key_issues": [],
+        "strengths": [],
+        "recommendations": []
+    }
+
+    # Analyze hook (first 3 seconds)
+    hook_subs = [s for s in subtitles if s.is_hook]
+    if hook_subs:
+        hook_text = " ".join([s.text for s in hook_subs])
+
+        # Check if hook is a question (often less effective)
+        if "?" in hook_text:
+            insights["key_issues"].append({
+                "type": "weak_hook",
+                "severity": "high",
+                "description": "Hook uses a question format which can signal 'this is an ad'",
+                "content": hook_text,
+                "impact": "Viewers scroll past before hearing the answer"
+            })
+            insights["recommendations"].append({
+                "type": "hook_improvement",
+                "priority": "high",
+                "suggestion": "Replace the question with a compelling statement or outcome",
+                "example": "Instead of 'Why did you choose X?' start with 'I went skiing in Italy after just 3 months!'"
+            })
+
+    # Analyze key messages timing
+    key_messages = [s for s in subtitles if s.is_key_message]
+    if key_messages:
+        first_key_message_time = key_messages[0].start_time
+        if first_key_message_time > 10:
+            insights["key_issues"].append({
+                "type": "late_key_message",
+                "severity": "high",
+                "description": f"First key benefit/outcome appears at {first_key_message_time:.1f}s",
+                "content": key_messages[0].text,
+                "impact": f"Only ~{_estimate_retention_at_time(content_map, first_key_message_time)}% of viewers hear this"
+            })
+            insights["recommendations"].append({
+                "type": "content_reorder",
+                "priority": "high",
+                "suggestion": "Move the strongest benefit/outcome to the first 3-5 seconds",
+                "example": f"Lead with: '{key_messages[0].text}'"
+            })
+
+    # Analyze CTA timing
+    cta_subs = [s for s in subtitles if s.content_type == "cta"]
+    if cta_subs:
+        cta_time = cta_subs[0].start_time
+        cta_retention = _estimate_retention_at_time(content_map, cta_time)
+        if cta_retention < 10:
+            insights["key_issues"].append({
+                "type": "late_cta",
+                "severity": "medium",
+                "description": f"CTA appears at {cta_time:.1f}s when only ~{cta_retention}% are watching",
+                "content": cta_subs[0].text,
+                "impact": "Most viewers never see the call to action"
+            })
+            insights["recommendations"].append({
+                "type": "cta_timing",
+                "priority": "medium",
+                "suggestion": "Show CTA earlier or create a shorter video version"
+            })
+
+    # Add critical dropoff issues
+    for cc in critical_content:
+        insights["key_issues"].append({
+            "type": "critical_dropoff",
+            "severity": "high" if cc["drop_percent"] > 30 else "medium",
+            "description": f"{cc['drop_percent']:.0f}% drop at {cc['timestamp']:.1f}s",
+            "content": cc["content_at_dropoff"],
+            "impact": cc["issue"]
+        })
+
+    # Analyze strengths from benchmark comparison
+    if benchmark_comparison:
+        if benchmark_comparison.get("ctr", {}).get("performance") == "above":
+            insights["strengths"].append(
+                f"Strong CTR ({benchmark_comparison['ctr']['value']:.2f}%) - "
+                f"{benchmark_comparison['ctr']['diff_percent']:+.1f}% vs account average"
+            )
+
+    # Analyze video metrics strengths
+    if video_metrics:
+        thruplay_rate = video_metrics.get("thruplay_rate", 0)
+        if thruplay_rate > 10:
+            insights["strengths"].append(f"Good thruplay rate ({thruplay_rate:.1f}%)")
+
+        # Check if retention stabilizes
+        retention_pcts = video_metrics.get("retention_percentages", {})
+        if retention_pcts:
+            mid_retention = retention_pcts.get("50%", 0)
+            late_retention = retention_pcts.get("75%", 0)
+            if mid_retention > 0 and late_retention > 0:
+                late_drop = mid_retention - late_retention
+                if late_drop < 5:
+                    insights["strengths"].append(
+                        f"Strong retention after midpoint (only {late_drop:.0f}% drop from 50% to 75%)"
+                    )
+
+    return insights
+
+
+def _estimate_retention_at_time(content_map: List[ContentRetentionMapping], timestamp: float) -> int:
+    """Estimate retention percentage at a given timestamp."""
+    for mapping in content_map:
+        if mapping.timestamp >= timestamp:
+            return int(mapping.retention_percent)
+    return 0
 
 
 # =============================================================================

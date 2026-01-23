@@ -588,10 +588,78 @@ Integrated library video matching as an automatic fallback in `analyze_video_cre
 
 ---
 
+## Step 9: Video Analysis Methodology & Agent Instructions ✅
+
+**Status:** Complete
+**Completed:** 2026-01-23
+
+### Overview
+
+Added comprehensive video analysis methodology to enable detailed content-to-retention correlation analysis. The methodology documents how to extract subtitles, analyze frame visuals, and generate actionable insights.
+
+### Methodology Documentation
+
+Added to `creative_analysis.py` (lines 73-209):
+
+1. **Subtitle Extraction** - Extract EVERY subtitle, classify as hook/benefit/social_proof/cta
+2. **Frame Visual Analysis** - Person (gender, age, expression, eye contact), setting, scene type
+3. **Performance Correlation** - Map content to retention curve, identify critical dropoffs
+4. **Insights Generation** - Key issues, strengths, specific recommendations
+
+### Data Structures Added
+
+| Component | Description |
+|-----------|-------------|
+| `FrameVisualAnalysis` | Dataclass for frame analysis (person, setting, scene, motion) |
+| `SubtitleSegment` | Dataclass for classified subtitles (content_type, is_hook, is_key_message) |
+| `ContentRetentionMapping` | Maps content to retention % at each timestamp |
+| `VideoCreativeAnalysis` | Complete video analysis result with all components |
+| `VIDEO_ANALYSIS_CONFIG` | Configuration dict (hook_window, dropoff_threshold, etc.) |
+
+### Helper Functions Added
+
+| Function | Purpose |
+|----------|---------|
+| `_classify_subtitle_content()` | Classify text as hook/benefit/cta/question/social_proof |
+| `_extract_subtitles_detailed()` | Process subtitles with classification |
+| `_create_content_retention_mapping()` | Map content to retention curve |
+| `_identify_critical_dropoff_content()` | Find what content causes viewer dropoffs |
+| `_get_dropoff_recommendation()` | Generate specific fix recommendations |
+| `_generate_video_insights_detailed()` | Create comprehensive insights |
+| `_estimate_retention_at_time()` | Estimate retention at any timestamp |
+
+### Agent Instructions Created
+
+| File | Purpose |
+|------|---------|
+| `memory-bank/creative-analyzer-agent.md` | Comprehensive agent instructions (~300 lines) |
+| `CLAUDE.md` update | Quick reference section for creative analysis |
+
+### Agent Instructions Content
+
+The `creative-analyzer-agent.md` covers:
+- When to use the creative analyzer
+- Video analysis workflow (5 phases)
+- Subtitle extraction with content classification
+- Frame visual analysis (person, setting, scene)
+- Content-retention mapping
+- Image analysis workflow
+- Output format template
+- Common patterns & fixes
+- Quality checklist
+
+### Tests
+
+- All 51 creative_analysis tests pass
+- Import verification successful
+
+---
+
 ## Git Commits (Multi-Tenant)
 
 | Commit | Description |
 |--------|-------------|
+| `27a0959` | Add library video matching with fallback integration (Step 8) |
 | `e43abe7` | Add multi-tenant credentials documentation to CLAUDE.md |
 | `9237627` | Consolidate error handling: merge errors.py into retry.py |
 | `87a1c03` | Add multi-credential architecture for multi-tenant ad account management |

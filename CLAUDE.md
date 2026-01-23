@@ -189,6 +189,48 @@ get_ads(account_id="act_123456789", campaign_id="123", time_range="last_7d", onl
 get_active_ads_analysis(account_id="act_123456789", time_range="last_30d", performance_metric="ctr")
 ```
 
+## Creative Analysis
+
+When analyzing ad creatives (video or image), follow the detailed methodology in `memory-bank/creative-analyzer-agent.md`.
+
+### Quick Reference
+
+**Video Analysis Workflow:**
+1. **Subtitle Extraction**: Extract EVERY subtitle (1 frame/second minimum). Classify each as hook/benefit/social_proof/cta.
+2. **Frame Visual Analysis**: For each frame, document person (gender, age, expression, eye contact), setting (indoor/outdoor), scene type, and text overlays.
+3. **Content-Retention Mapping**: Map each subtitle/frame to the retention curve percentage. Identify critical drop-off points (>20% drop).
+4. **Insights Generation**: Identify key issues (weak hook, late key message, late CTA), strengths, and specific recommendations with examples.
+
+**Key Questions to Answer:**
+- What's the hook (first 3 seconds)? Is it a question (bad) or outcome (good)?
+- Where is the key benefit/outcome mentioned? What % of viewers see it?
+- When does the CTA appear? What % of viewers are still watching?
+- Is there visual variety or static talking head?
+
+**Common Issues:**
+- Question hook format ("Why did you...?") → Replace with outcome statement
+- Best content appears late (>10s) → Front-load the value proposition
+- CTA when no one watching → Show earlier or create shorter cut
+
+### Creative Analysis Tools
+
+```python
+# Unified analysis (auto-detects type)
+analyze_creative(ad_id, account_name, time_range, extract_frames=True, extract_subtitles=True)
+
+# Video-specific
+analyze_video_creative(ad_id, account_name, time_range, extract_frames=True, extract_subtitles=True)
+
+# Image-specific
+analyze_image_creative(ad_id, account_name, time_range, include_benchmarks=True)
+
+# Batch analysis
+analyze_account_creatives(account_id, account_name, time_range, limit=20, min_spend=1.0)
+
+# Get insights only
+get_creative_insights(ad_id, account_name, time_range)
+```
+
 ## Custom Commands
 
 - **"Big Tony"** or **"call Tony"**: Run `/big-tony` to review and fix code issues
