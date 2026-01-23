@@ -151,8 +151,8 @@ Integrated credential management into server startup with preflight validation.
 |------|-------------|--------|
 | Step 1 | Core Infrastructure | ✅ |
 | Step 2 | Image Analysis | ✅ |
-| Step 3 | Video Processing Module | ⏳ Pending |
-| Step 4 | Video Analysis Integration | ⏳ Pending |
+| Step 3 | Video Processing Module | ✅ |
+| Step 4 | Video Analysis Integration | ✅ |
 | Step 5 | Main Tools & Insights | ⏳ Pending |
 | Step 6 | Testing | ⏳ Pending |
 | Step 7 | Documentation & Integration | ⏳ Pending |
@@ -243,6 +243,85 @@ Added image analysis functionality with performance metrics and account benchmar
 - Image ad (1080x1080, 1:1): Retrieved dimensions, hash, 2 image URLs
 - Performance metrics: 5,326 impressions, 2.23% CTR
 - Analysis level: FULL
+
+---
+
+### Step 3: Video Processing Module ✅
+
+**Completed:** 2026-01-23
+
+Created standalone video processing module with ffmpeg/tesseract integration.
+
+#### File Created
+
+| File | Purpose |
+|------|---------|
+| `meta_ads_mcp/core/video_processing.py` | Video download, frame extraction, OCR (~550 lines) |
+
+#### Components Implemented
+
+| Component | Description |
+|-----------|-------------|
+| `VideoConfig` | Configuration dataclass (max_frames, intervals, thresholds) |
+| `ExtractedFrame` | Frame metadata (path, timestamp, scene_change) |
+| `SubtitleRegion` | OCR result (text, confidence, timestamp) |
+| `VideoMetadata` | Video info (duration, dimensions, fps, codec) |
+| `VideoProcessingResult` | Combined processing output |
+| `VideoProcessingContext` | Async context manager for temp file cleanup |
+
+#### Functions Implemented
+
+| Function | Purpose |
+|----------|---------|
+| `check_ffmpeg_available()` | Verify ffmpeg installation |
+| `check_tesseract_available()` | Verify tesseract installation |
+| `download_video()` | Download video from Meta API |
+| `get_video_metadata_ffprobe()` | Get detailed metadata with ffprobe |
+| `extract_frames()` | Hybrid scene + interval extraction |
+| `detect_subtitles()` | Tesseract OCR on frames |
+| `detect_subtitles_batch()` | Parallel OCR on multiple frames |
+| `process_video()` | High-level orchestration function |
+
+#### System Requirements
+
+- FFmpeg 8.0.1 (available)
+- Tesseract 5.5.2 (available)
+
+---
+
+### Step 4: Video Analysis Integration ✅
+
+**Completed:** 2026-01-23
+
+Integrated video processing into creative analysis with retention metrics.
+
+#### Functions Added to creative_analysis.py
+
+| Function | Purpose |
+|----------|---------|
+| `_fetch_video_retention_metrics()` | Fetch play curve, thruplay, completion |
+| `_identify_dropoff_points()` | Find significant viewer dropoffs |
+
+#### MCP Tools Added
+
+| Tool | Description |
+|------|-------------|
+| `analyze_video_creative(ad_id)` | Full video analysis with retention metrics |
+
+#### Features
+
+- **Video Retention:** play_curve, p25/50/75/95/100 watched, thruplay
+- **Dropoff Analysis:** Identifies significant viewer dropoffs (>10% threshold)
+- **Early Dropoff Detection:** Flags videos losing >30% by 25% mark
+- **Optional Frame Extraction:** extract_frames=True enables ffmpeg processing
+- **Optional OCR:** extract_subtitles=True enables tesseract processing
+
+#### Tested With Real API
+
+- Video ad: 26,628 plays, 11.2% thruplay rate
+- Retention: 25%=40%, 50%=20%, 75%=14%
+- Dropoffs: 2 significant (60% drop at 25%, 20% drop at 50%)
+- Early dropoff: True (>30% loss by 25% mark)
 
 ---
 

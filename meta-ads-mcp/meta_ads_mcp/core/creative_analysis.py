@@ -12,6 +12,13 @@ from enum import Enum
 from .api import meta_api_tool, make_api_request
 from .utils import logger, extract_creative_image_urls, download_image
 from .server import mcp_server
+from .video_processing import (
+    VideoConfig,
+    VideoProcessingResult,
+    process_video,
+    check_ffmpeg_available,
+    DEFAULT_CONFIG as VIDEO_DEFAULT_CONFIG
+)
 
 
 # =============================================================================
@@ -924,6 +931,338 @@ async def get_account_benchmarks(
 
     except Exception as e:
         logger.error(f"Error fetching benchmarks for {account_id}: {e}")
+        return json.dumps({
+            "error": str(e),
+            "error_type": "UnexpectedError"
+        }, indent=2)
+
+
+# =============================================================================
+# Video Analysis Functions
+# =============================================================================
+
+async def _fetch_video_retention_metrics(
+    ad_id: str,
+    time_range: Union[str, Dict[str, str]],
+    access_token: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Fetch video-specific retention and engagement metrics.
+
+    Args:
+        ad_id: Meta Ads ad ID
+        time_range: Time range preset or custom dict
+        access_token: Optional access token
+
+    Returns:
+        Dict with video metrics including retention data
+    """
+    endpoint = f"{ad_id}/insights"
+    params = {
+        "fields": (
+            "video_play_actions,"
+            "video_p25_watched_actions,"
+            "video_p50_watched_actions,"
+            "video_p75_watched_actions,"
+            "video_p95_watched_actions,"
+            "video_p100_watched_actions,"
+            "video_thruplay_watched_actions,"
+            "video_avg_time_watched_actions,"
+            "video_play_curve_actions"
+        )
+    }
+
+    # Handle time_range
+    if isinstance(time_range, dict):
+        params["time_range"] = json.dumps(time_range)
+    else:
+        params["date_preset"] = time_range
+
+    data = await make_api_request(endpoint, access_token, params)
+
+    if "error" in data:
+        logger.warning(f"Failed to fetch video metrics for {ad_id}: {data.get('error')}")
+        return None
+
+    insights = data.get("data", [])
+    if not insights:
+        return None
+
+    raw = insights[0]
+
+    # Parse video metrics
+    def get_action_value(actions: List[Dict], action_type: str = "video_view") -> int:
+        """Extract value from actions array."""
+        if not actions:
+            return 0
+        for action in actions:
+            if action.get("action_type") == action_type:
+                return int(action.get("value", 0))
+        # Fallback to first action value
+        return int(actions[0].get("value", 0)) if actions else 0
+
+    video_plays = get_action_value(raw.get("video_play_actions", []))
+    p25 = get_action_value(raw.get("video_p25_watched_actions", []))
+    p50 = get_action_value(raw.get("video_p50_watched_actions", []))
+    p75 = get_action_value(raw.get("video_p75_watched_actions", []))
+    p95 = get_action_value(raw.get("video_p95_watched_actions", []))
+    p100 = get_action_value(raw.get("video_p100_watched_actions", []))
+    thruplay = get_action_value(raw.get("video_thruplay_watched_actions", []))
+
+    # Get average watch time
+    avg_watch_actions = raw.get("video_avg_time_watched_actions", [])
+    avg_watch_time = 0.0
+    if avg_watch_actions:
+        avg_watch_time = float(avg_watch_actions[0].get("value", 0))
+
+    # Build retention curve (if available)
+    retention_curve = None
+    play_curve_actions = raw.get("video_play_curve_actions", [])
+    if play_curve_actions and play_curve_actions[0].get("value"):
+        try:
+            retention_curve = json.loads(play_curve_actions[0]["value"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Calculate retention rates
+    watch_completion_rate = (p100 / video_plays * 100) if video_plays > 0 else 0
+    thruplay_rate = (thruplay / video_plays * 100) if video_plays > 0 else 0
+
+    return {
+        "video_plays": video_plays,
+        "retention_p25": p25,
+        "retention_p50": p50,
+        "retention_p75": p75,
+        "retention_p95": p95,
+        "retention_p100": p100,
+        "thruplay_count": thruplay,
+        "avg_watch_time_seconds": avg_watch_time,
+        "retention_curve": retention_curve,
+        "watch_completion_rate": round(watch_completion_rate, 2),
+        "thruplay_rate": round(thruplay_rate, 2),
+        "retention_percentages": {
+            "25%": round((p25 / video_plays * 100), 1) if video_plays > 0 else 0,
+            "50%": round((p50 / video_plays * 100), 1) if video_plays > 0 else 0,
+            "75%": round((p75 / video_plays * 100), 1) if video_plays > 0 else 0,
+            "95%": round((p95 / video_plays * 100), 1) if video_plays > 0 else 0,
+            "100%": round((p100 / video_plays * 100), 1) if video_plays > 0 else 0
+        }
+    }
+
+
+def _identify_dropoff_points(
+    retention_percentages: Dict[str, float],
+    threshold: float = 10.0
+) -> List[Dict[str, Any]]:
+    """
+    Identify significant viewer drop-off points from retention data.
+
+    Args:
+        retention_percentages: Dict with retention at 25%, 50%, 75%, 95%, 100%
+        threshold: Minimum percentage drop to flag
+
+    Returns:
+        List of drop-off points with timestamp estimates
+    """
+    dropoffs = []
+    prev_rate = 100.0
+    checkpoints = ["25%", "50%", "75%", "95%", "100%"]
+
+    for checkpoint in checkpoints:
+        current_rate = retention_percentages.get(checkpoint, 0)
+        drop = prev_rate - current_rate
+
+        if drop >= threshold:
+            dropoffs.append({
+                "checkpoint": checkpoint,
+                "drop_percent": round(drop, 1),
+                "remaining_viewers": round(current_rate, 1),
+                "significance": "high" if drop > 20 else "medium"
+            })
+
+        prev_rate = current_rate
+
+    return dropoffs
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def analyze_video_creative(
+    ad_id: str,
+    access_token: Optional[str] = None,
+    account_name: Optional[str] = None,
+    time_range: Union[str, Dict[str, str]] = "last_30d",
+    include_benchmarks: bool = True,
+    extract_frames: bool = False,
+    extract_subtitles: bool = False
+) -> str:
+    """
+    Analyze a video ad creative with retention metrics and benchmarks.
+
+    Returns video metadata, retention metrics (play curve, thruplay rate),
+    text content, performance metrics, and comparison to account benchmarks.
+
+    Optionally extracts frames and detects subtitles (requires ffmpeg/tesseract).
+
+    Args:
+        ad_id: Meta Ads ad ID
+        access_token: Meta API access token (optional)
+        account_name: Account name from credentials.json (optional)
+        time_range: Time range for metrics (default: last_30d)
+        include_benchmarks: Whether to include account benchmarks (default: True)
+        extract_frames: Whether to extract video frames (requires ffmpeg)
+        extract_subtitles: Whether to detect subtitles in frames (requires tesseract)
+
+    Returns:
+        JSON with complete video creative analysis
+    """
+    if not ad_id:
+        return json.dumps({"error": "No ad ID provided"}, indent=2)
+
+    try:
+        # Fetch creative metadata
+        ad_data = await _fetch_creative_metadata(ad_id, access_token)
+
+        creative = ad_data.get("creative", {})
+        account_id = ad_data.get("account_id", "")
+
+        # Detect creative type
+        creative_type, type_data = _detect_creative_type(creative)
+
+        # Check if this is actually a video creative
+        if creative_type != CreativeType.VIDEO:
+            return json.dumps({
+                "error": "This is not a video creative",
+                "creative_type": creative_type.value,
+                "hint": "Use analyze_image_creative for image ads"
+            }, indent=2)
+
+        # Extract content
+        content = _extract_creative_content(creative)
+
+        # Get video ID
+        video_id = creative.get("video_id")
+        if not video_id:
+            # Try to get from object_story_spec
+            object_story_spec = creative.get("object_story_spec", {})
+            video_data = object_story_spec.get("video_data", {})
+            video_id = video_data.get("video_id")
+
+        # Initialize result
+        analysis_level = AnalysisLevel.METADATA_ONLY.value
+        video_analysis = {
+            "video_id": video_id,
+            "thumbnail_url": creative.get("thumbnail_url"),
+            "duration_seconds": None,
+            "dimensions": None,
+            "frames_extracted": 0,
+            "subtitles_detected": []
+        }
+
+        # Fetch video metadata if we have video_id
+        if video_id:
+            video_endpoint = f"{video_id}"
+            video_params = {"fields": "length,width,height,source"}
+            video_meta = await make_api_request(video_endpoint, access_token, video_params)
+
+            if "error" not in video_meta:
+                video_analysis["duration_seconds"] = float(video_meta.get("length", 0))
+                width = video_meta.get("width")
+                height = video_meta.get("height")
+                if width and height:
+                    from math import gcd
+                    divisor = gcd(width, height)
+                    aspect_ratio = f"{width // divisor}:{height // divisor}"
+                    video_analysis["dimensions"] = {
+                        "width": width,
+                        "height": height,
+                        "aspect_ratio": aspect_ratio
+                    }
+                analysis_level = AnalysisLevel.THUMBNAIL_ONLY.value
+
+        # Optionally process video frames
+        if extract_frames and video_id and account_id:
+            ffmpeg_ok, _ = check_ffmpeg_available()
+            if ffmpeg_ok:
+                try:
+                    processing_result = await process_video(
+                        video_id=video_id,
+                        account_id=account_id,
+                        access_token=access_token,
+                        extract_subtitles=extract_subtitles
+                    )
+
+                    if processing_result.frames:
+                        video_analysis["frames_extracted"] = len(processing_result.frames)
+                        analysis_level = AnalysisLevel.FULL.value
+
+                    if processing_result.subtitles:
+                        video_analysis["subtitles_detected"] = [
+                            {
+                                "text": s.text,
+                                "timestamp": s.timestamp,
+                                "confidence": s.confidence
+                            }
+                            for s in processing_result.subtitles
+                        ]
+
+                except Exception as e:
+                    logger.warning(f"Video processing failed: {e}")
+
+        # Fetch video retention metrics
+        video_metrics = await _fetch_video_retention_metrics(ad_id, time_range, access_token)
+
+        # Fetch standard performance metrics
+        raw_metrics = await _fetch_performance_metrics(ad_id, time_range, access_token)
+        metrics = None
+        metrics_dict = None
+        if raw_metrics:
+            metrics = _parse_performance_metrics(raw_metrics, time_range)
+            metrics_dict = asdict(metrics)
+
+        # Fetch benchmarks and compare
+        benchmark_comparison = None
+        if include_benchmarks and metrics and account_id:
+            benchmarks = await _calculate_benchmarks(account_id, time_range, None, access_token)
+            if benchmarks:
+                benchmark_comparison = _compare_to_benchmarks(metrics, benchmarks)
+
+        # Identify drop-off points
+        dropoff_points = []
+        if video_metrics and video_metrics.get("retention_percentages"):
+            dropoff_points = _identify_dropoff_points(video_metrics["retention_percentages"])
+
+        # Build result
+        result = {
+            "ad_id": ad_id,
+            "ad_name": ad_data.get("name", ""),
+            "account_id": account_id,
+            "creative_id": creative.get("id", ""),
+            "creative_type": creative_type.value,
+            "analysis_level": analysis_level,
+            "video_analysis": video_analysis,
+            "content": {
+                "headlines": content.headlines,
+                "primary_texts": content.primary_texts,
+                "descriptions": content.descriptions,
+                "call_to_action": content.call_to_action,
+                "link_url": content.link_url
+            },
+            "performance_metrics": metrics_dict,
+            "video_metrics": video_metrics,
+            "dropoff_analysis": {
+                "significant_dropoffs": dropoff_points,
+                "has_early_dropoff": any(d["checkpoint"] == "25%" and d["drop_percent"] > 30 for d in dropoff_points)
+            } if dropoff_points else None,
+            "benchmark_comparison": benchmark_comparison
+        }
+
+        return json.dumps(result, indent=2)
+
+    except CreativeAnalysisError as e:
+        return json.dumps(e.to_dict(), indent=2)
+    except Exception as e:
+        logger.error(f"Error analyzing video creative for {ad_id}: {e}")
         return json.dumps({
             "error": str(e),
             "error_type": "UnexpectedError"
