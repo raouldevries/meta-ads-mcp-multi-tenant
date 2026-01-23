@@ -18,21 +18,32 @@ import platform
 META_APP_ID = os.environ.get("META_APP_ID", "")
 META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
 
-# Only show warnings about Meta credentials if we're not using Pipeboard
 # Check for Pipeboard token in environment
 using_pipeboard = bool(os.environ.get("PIPEBOARD_API_TOKEN", ""))
 
-# Print warning if Meta app credentials are not configured and not using Pipeboard
+# Check for multi-tenant credentials.json file
+def _get_credentials_path() -> pathlib.Path:
+    """Get platform-specific credentials.json path."""
+    if platform.system() == "Windows":
+        base_path = pathlib.Path(os.environ.get("APPDATA", ""))
+    elif platform.system() == "Darwin":
+        base_path = pathlib.Path.home() / "Library" / "Application Support"
+    else:
+        base_path = pathlib.Path.home() / ".config"
+    return base_path / "meta-ads-mcp" / "credentials.json"
+
+using_credentials_file = _get_credentials_path().exists()
+
+# Only show warnings if NOT using credentials.json AND NOT using Pipeboard
 # Use stderr to avoid corrupting stdio MCP transport
-if not using_pipeboard:
+if not using_pipeboard and not using_credentials_file:
     if not META_APP_ID:
         print("WARNING: META_APP_ID environment variable is not set.", file=sys.stderr)
-        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.", file=sys.stderr)
-        print("ALTERNATIVE: For direct Meta authentication, set META_APP_ID to your Meta App ID.", file=sys.stderr)
+        print("RECOMMENDED: Create credentials.json for multi-tenant support.", file=sys.stderr)
+        print("ALTERNATIVE: Set META_APP_ID for direct Meta authentication.", file=sys.stderr)
     if not META_APP_SECRET:
         print("WARNING: META_APP_SECRET environment variable is not set.", file=sys.stderr)
-        print("NOTE: This is only needed for direct Meta authentication. Pipeboard authentication doesn't require this.", file=sys.stderr)
-        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.", file=sys.stderr)
+        print("NOTE: This is only needed for direct Meta authentication.", file=sys.stderr)
 
 # Configure logging to file
 def setup_logging():
