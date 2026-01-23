@@ -153,7 +153,7 @@ Integrated credential management into server startup with preflight validation.
 | Step 2 | Image Analysis | ✅ |
 | Step 3 | Video Processing Module | ✅ |
 | Step 4 | Video Analysis Integration | ✅ |
-| Step 5 | Main Tools & Insights | ⏳ Pending |
+| Step 5 | Main Tools & Insights | ✅ |
 | Step 6 | Testing | ⏳ Pending |
 | Step 7 | Documentation & Integration | ⏳ Pending |
 
@@ -322,6 +322,45 @@ Integrated video processing into creative analysis with retention metrics.
 - Retention: 25%=40%, 50%=20%, 75%=14%
 - Dropoffs: 2 significant (60% drop at 25%, 20% drop at 50%)
 - Early dropoff: True (>30% loss by 25% mark)
+
+---
+
+### Step 5: Main Tools & Insights ✅
+
+**Completed:** 2026-01-23
+
+Added unified analysis entry point, batch analysis, and AI insights generation.
+
+#### MCP Tools Added
+
+| Tool | Description |
+|------|-------------|
+| `analyze_creative(ad_id)` | Unified entry point - auto-detects type and routes |
+| `analyze_account_creatives(account_id)` | Batch analysis with top/bottom performers |
+| `get_creative_insights(ad_id)` | AI-generated strengths, weaknesses, recommendations |
+
+#### Features
+
+- **Unified Analysis:** Single tool detects image/video and routes appropriately
+- **Batch Analysis:** Analyze multiple creatives, identify top/bottom performers
+- **Summary Statistics:** Total spend, impressions, clicks, CTR breakdown by type
+- **AI Insights:** Rule-based analysis with actionable recommendations
+
+#### Insights Engine
+
+| Category | Analysis |
+|----------|----------|
+| CTR Performance | Compare to account average, flag above/below |
+| CPC Efficiency | Lower is better, flag expensive clicks |
+| Video Thruplay | Flag low (<5%) or high (>15%) rates |
+| Early Dropoff | Flag >30% viewer loss by 25% mark |
+| Mid-Video Retention | Flag good (>30% at 50%) retention |
+
+#### Tested With Real API
+
+- Video ad CTR: +13.6% above account average (strength)
+- Early dropoff detected: Significant viewer loss in first 25% (weakness)
+- Recommendation: "Lead with outcome/benefit, not a question" (high priority)
 
 ---
 

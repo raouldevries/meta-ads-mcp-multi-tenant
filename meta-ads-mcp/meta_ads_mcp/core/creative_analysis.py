@@ -1267,3 +1267,451 @@ async def analyze_video_creative(
             "error": str(e),
             "error_type": "UnexpectedError"
         }, indent=2)
+
+
+# =============================================================================
+# Unified Analysis Tool (Main Entry Point)
+# =============================================================================
+
+@mcp_server.tool()
+@meta_api_tool
+async def analyze_creative(
+    ad_id: str,
+    access_token: Optional[str] = None,
+    account_name: Optional[str] = None,
+    time_range: Union[str, Dict[str, str]] = "last_30d",
+    include_benchmarks: bool = True,
+    extract_frames: bool = False,
+    extract_subtitles: bool = False
+) -> str:
+    """
+    Analyze any ad creative (image or video) with performance metrics.
+
+    Automatically detects creative type and routes to appropriate analysis.
+    Returns visual analysis, text content, performance metrics, and benchmarks.
+
+    Args:
+        ad_id: Meta Ads ad ID
+        access_token: Meta API access token (optional)
+        account_name: Account name from credentials.json (optional)
+        time_range: Time range for metrics (default: last_30d)
+        include_benchmarks: Whether to include account benchmarks (default: True)
+        extract_frames: For video: whether to extract frames (requires ffmpeg)
+        extract_subtitles: For video: whether to detect subtitles (requires tesseract)
+
+    Returns:
+        JSON with complete creative analysis (format depends on creative type)
+    """
+    if not ad_id:
+        return json.dumps({"error": "No ad ID provided"}, indent=2)
+
+    try:
+        # Fetch creative metadata to detect type
+        ad_data = await _fetch_creative_metadata(ad_id, access_token)
+        creative = ad_data.get("creative", {})
+
+        # Detect creative type
+        creative_type, _ = _detect_creative_type(creative)
+
+        # Route to appropriate analysis
+        if creative_type == CreativeType.VIDEO:
+            return await analyze_video_creative(
+                ad_id=ad_id,
+                access_token=access_token,
+                account_name=account_name,
+                time_range=time_range,
+                include_benchmarks=include_benchmarks,
+                extract_frames=extract_frames,
+                extract_subtitles=extract_subtitles
+            )
+        else:
+            # IMAGE, CAROUSEL, or UNKNOWN all use image analysis
+            return await analyze_image_creative(
+                ad_id=ad_id,
+                access_token=access_token,
+                account_name=account_name,
+                time_range=time_range,
+                include_benchmarks=include_benchmarks
+            )
+
+    except CreativeAnalysisError as e:
+        return json.dumps(e.to_dict(), indent=2)
+    except Exception as e:
+        logger.error(f"Error analyzing creative {ad_id}: {e}")
+        return json.dumps({
+            "error": str(e),
+            "error_type": "UnexpectedError"
+        }, indent=2)
+
+
+# =============================================================================
+# Batch Analysis Tool
+# =============================================================================
+
+@mcp_server.tool()
+@meta_api_tool
+async def analyze_account_creatives(
+    account_id: str,
+    access_token: Optional[str] = None,
+    account_name: Optional[str] = None,
+    time_range: Union[str, Dict[str, str]] = "last_30d",
+    limit: int = 20,
+    min_spend: float = 1.0,
+    creative_type_filter: Optional[str] = None
+) -> str:
+    """
+    Analyze multiple creatives from an ad account.
+
+    Fetches ads with spend in the time range and provides summary statistics
+    with top/bottom performers identified.
+
+    Args:
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX)
+        access_token: Meta API access token (optional)
+        account_name: Account name from credentials.json (optional)
+        time_range: Time range for metrics (default: last_30d)
+        limit: Maximum number of ads to analyze (default: 20)
+        min_spend: Minimum spend to include (default: $1.0)
+        creative_type_filter: Filter by type: "image", "video", or None for all
+
+    Returns:
+        JSON with account creative analysis summary
+    """
+    if not account_id:
+        return json.dumps({"error": "No account ID provided"}, indent=2)
+
+    # Ensure account_id has act_ prefix
+    if not account_id.startswith("act_"):
+        account_id = f"act_{account_id}"
+
+    try:
+        # Fetch ads with insights
+        endpoint = f"{account_id}/ads"
+        params = {
+            "fields": (
+                "id,name,status,"
+                "creative{id,name,thumbnail_url,object_story_spec,asset_feed_spec,video_id},"
+                "insights.date_preset({date_preset})"
+                "{impressions,clicks,ctr,spend,cpc,cpm,reach}"
+            ).replace("{date_preset}", time_range if isinstance(time_range, str) else "last_30d"),
+            "limit": min(limit * 2, 100),  # Fetch more to filter
+            "filtering": json.dumps([{"field": "effective_status", "operator": "IN", "value": ["ACTIVE", "PAUSED"]}])
+        }
+
+        data = await make_api_request(endpoint, access_token, params)
+
+        if "error" in data:
+            return json.dumps({
+                "error": f"Failed to fetch ads: {data.get('error')}",
+                "error_type": "APIError"
+            }, indent=2)
+
+        ads = data.get("data", [])
+        if not ads:
+            return json.dumps({
+                "account_id": account_id,
+                "time_range": time_range,
+                "total_ads": 0,
+                "message": "No ads found in account"
+            }, indent=2)
+
+        # Process and filter ads
+        processed_ads = []
+        type_counts = {"image": 0, "video": 0, "carousel": 0, "unknown": 0}
+
+        for ad in ads:
+            # Get insights
+            insights = ad.get("insights", {}).get("data", [])
+            if not insights:
+                continue
+
+            insight = insights[0]
+            spend = float(insight.get("spend", 0))
+
+            # Filter by minimum spend
+            if spend < min_spend:
+                continue
+
+            # Detect creative type
+            creative = ad.get("creative", {})
+            creative_type, _ = _detect_creative_type(creative)
+            type_str = creative_type.value
+
+            # Filter by creative type if specified
+            if creative_type_filter and type_str != creative_type_filter:
+                continue
+
+            type_counts[type_str] = type_counts.get(type_str, 0) + 1
+
+            # Build ad summary
+            processed_ads.append({
+                "ad_id": ad.get("id"),
+                "ad_name": ad.get("name", ""),
+                "creative_type": type_str,
+                "thumbnail_url": creative.get("thumbnail_url"),
+                "metrics": {
+                    "impressions": int(insight.get("impressions", 0)),
+                    "clicks": int(insight.get("clicks", 0)),
+                    "ctr": float(insight.get("ctr", 0)),
+                    "spend": spend,
+                    "cpc": float(insight.get("cpc", 0)) if insight.get("cpc") else None,
+                    "cpm": float(insight.get("cpm", 0)) if insight.get("cpm") else None
+                }
+            })
+
+            if len(processed_ads) >= limit:
+                break
+
+        if not processed_ads:
+            return json.dumps({
+                "account_id": account_id,
+                "time_range": time_range,
+                "total_ads": 0,
+                "message": f"No ads found with spend >= ${min_spend}"
+            }, indent=2)
+
+        # Sort by CTR for ranking
+        sorted_by_ctr = sorted(
+            processed_ads,
+            key=lambda x: x["metrics"]["ctr"],
+            reverse=True
+        )
+
+        # Calculate summary statistics
+        total_spend = sum(ad["metrics"]["spend"] for ad in processed_ads)
+        total_impressions = sum(ad["metrics"]["impressions"] for ad in processed_ads)
+        total_clicks = sum(ad["metrics"]["clicks"] for ad in processed_ads)
+        avg_ctr = (total_clicks / total_impressions * 100) if total_impressions > 0 else 0
+
+        ctrs = [ad["metrics"]["ctr"] for ad in processed_ads if ad["metrics"]["ctr"] > 0]
+        avg_ctr_per_ad = sum(ctrs) / len(ctrs) if ctrs else 0
+
+        # Identify top and bottom performers
+        top_performers = sorted_by_ctr[:3]
+        bottom_performers = sorted_by_ctr[-3:] if len(sorted_by_ctr) > 3 else []
+
+        result = {
+            "account_id": account_id,
+            "time_range": time_range,
+            "summary": {
+                "total_ads_analyzed": len(processed_ads),
+                "total_spend": round(total_spend, 2),
+                "total_impressions": total_impressions,
+                "total_clicks": total_clicks,
+                "overall_ctr": round(avg_ctr, 2),
+                "avg_ctr_per_ad": round(avg_ctr_per_ad, 2),
+                "creative_type_breakdown": type_counts
+            },
+            "top_performers": [
+                {
+                    "ad_id": ad["ad_id"],
+                    "ad_name": ad["ad_name"][:50],
+                    "creative_type": ad["creative_type"],
+                    "ctr": round(ad["metrics"]["ctr"], 2),
+                    "spend": round(ad["metrics"]["spend"], 2)
+                }
+                for ad in top_performers
+            ],
+            "bottom_performers": [
+                {
+                    "ad_id": ad["ad_id"],
+                    "ad_name": ad["ad_name"][:50],
+                    "creative_type": ad["creative_type"],
+                    "ctr": round(ad["metrics"]["ctr"], 2),
+                    "spend": round(ad["metrics"]["spend"], 2)
+                }
+                for ad in bottom_performers
+            ],
+            "all_ads": [
+                {
+                    "ad_id": ad["ad_id"],
+                    "ad_name": ad["ad_name"][:50],
+                    "creative_type": ad["creative_type"],
+                    "thumbnail_url": ad["thumbnail_url"],
+                    "metrics": ad["metrics"]
+                }
+                for ad in sorted_by_ctr
+            ]
+        }
+
+        return json.dumps(result, indent=2)
+
+    except Exception as e:
+        logger.error(f"Error analyzing account creatives for {account_id}: {e}")
+        return json.dumps({
+            "error": str(e),
+            "error_type": "UnexpectedError"
+        }, indent=2)
+
+
+# =============================================================================
+# AI Insights Generation
+# =============================================================================
+
+def _generate_insights(
+    creative_type: str,
+    metrics: Optional[Dict[str, Any]],
+    video_metrics: Optional[Dict[str, Any]],
+    benchmark_comparison: Optional[Dict[str, Any]],
+    dropoff_analysis: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Generate rule-based insights from creative analysis.
+
+    Args:
+        creative_type: Type of creative (image/video)
+        metrics: Performance metrics dict
+        video_metrics: Video-specific metrics (for video creatives)
+        benchmark_comparison: Benchmark comparison results
+        dropoff_analysis: Video dropoff analysis
+
+    Returns:
+        Dict with strengths, weaknesses, and recommendations
+    """
+    insights = {
+        "strengths": [],
+        "weaknesses": [],
+        "recommendations": []
+    }
+
+    if not metrics:
+        return insights
+
+    # Analyze benchmark comparison
+    if benchmark_comparison:
+        # CTR analysis
+        if "ctr" in benchmark_comparison:
+            ctr_data = benchmark_comparison["ctr"]
+            if ctr_data["performance"] == "above":
+                insights["strengths"].append(
+                    f"CTR is {ctr_data['diff_percent']:+.1f}% above account average"
+                )
+            elif ctr_data["performance"] == "below":
+                insights["weaknesses"].append(
+                    f"CTR is {abs(ctr_data['diff_percent']):.1f}% below account average"
+                )
+                insights["recommendations"].append({
+                    "type": "ctr_improvement",
+                    "priority": "high",
+                    "suggestion": "Test new headlines or visuals to improve click-through rate"
+                })
+
+        # CPC analysis
+        if "cpc" in benchmark_comparison:
+            cpc_data = benchmark_comparison["cpc"]
+            if cpc_data["performance"] == "below":  # Lower CPC is better
+                insights["strengths"].append(
+                    f"CPC is {abs(cpc_data['diff_percent']):.1f}% below account average"
+                )
+            elif cpc_data["performance"] == "above":
+                insights["weaknesses"].append(
+                    f"CPC is {cpc_data['diff_percent']:.1f}% above account average"
+                )
+
+    # Video-specific insights
+    if creative_type == "video" and video_metrics:
+        thruplay_rate = video_metrics.get("thruplay_rate", 0)
+        watch_completion = video_metrics.get("watch_completion_rate", 0)
+
+        # Thruplay analysis
+        if thruplay_rate > 15:
+            insights["strengths"].append(f"Strong thruplay rate of {thruplay_rate:.1f}%")
+        elif thruplay_rate < 5:
+            insights["weaknesses"].append(f"Low thruplay rate of {thruplay_rate:.1f}%")
+            insights["recommendations"].append({
+                "type": "video_engagement",
+                "priority": "high",
+                "suggestion": "Consider shorter video or stronger hook in first 3 seconds"
+            })
+
+        # Dropoff analysis
+        if dropoff_analysis and dropoff_analysis.get("has_early_dropoff"):
+            insights["weaknesses"].append("Significant viewer dropoff in first 25% of video")
+            insights["recommendations"].append({
+                "type": "hook",
+                "priority": "high",
+                "suggestion": "Lead with the outcome or benefit, not a question. Grab attention immediately."
+            })
+
+        # Retention curve insights
+        retention = video_metrics.get("retention_percentages", {})
+        if retention.get("50%", 0) > 30:
+            insights["strengths"].append(f"Good mid-video retention ({retention['50%']:.0f}% at 50%)")
+
+    return insights
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def get_creative_insights(
+    ad_id: str,
+    access_token: Optional[str] = None,
+    account_name: Optional[str] = None,
+    time_range: Union[str, Dict[str, str]] = "last_30d"
+) -> str:
+    """
+    Generate AI insights for an ad creative.
+
+    Analyzes performance metrics and generates actionable recommendations
+    based on benchmark comparisons and retention patterns.
+
+    Args:
+        ad_id: Meta Ads ad ID
+        access_token: Meta API access token (optional)
+        account_name: Account name from credentials.json (optional)
+        time_range: Time range for metrics (default: last_30d)
+
+    Returns:
+        JSON with strengths, weaknesses, and recommendations
+    """
+    if not ad_id:
+        return json.dumps({"error": "No ad ID provided"}, indent=2)
+
+    try:
+        # Get full analysis first
+        analysis_result = await analyze_creative(
+            ad_id=ad_id,
+            access_token=access_token,
+            account_name=account_name,
+            time_range=time_range,
+            include_benchmarks=True
+        )
+
+        analysis = json.loads(analysis_result)
+
+        if "error" in analysis:
+            return analysis_result
+
+        # Generate insights
+        insights = _generate_insights(
+            creative_type=analysis.get("creative_type", "unknown"),
+            metrics=analysis.get("performance_metrics"),
+            video_metrics=analysis.get("video_metrics"),
+            benchmark_comparison=analysis.get("benchmark_comparison"),
+            dropoff_analysis=analysis.get("dropoff_analysis")
+        )
+
+        result = {
+            "ad_id": ad_id,
+            "ad_name": analysis.get("ad_name", ""),
+            "creative_type": analysis.get("creative_type"),
+            "insights": insights,
+            "summary": {
+                "total_strengths": len(insights["strengths"]),
+                "total_weaknesses": len(insights["weaknesses"]),
+                "total_recommendations": len(insights["recommendations"]),
+                "priority_actions": [
+                    r for r in insights["recommendations"]
+                    if r.get("priority") == "high"
+                ]
+            }
+        }
+
+        return json.dumps(result, indent=2)
+
+    except Exception as e:
+        logger.error(f"Error generating insights for {ad_id}: {e}")
+        return json.dumps({
+            "error": str(e),
+            "error_type": "UnexpectedError"
+        }, indent=2)
