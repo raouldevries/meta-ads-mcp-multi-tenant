@@ -20,6 +20,10 @@ analyze_creative(ad_id)
     ├── _detect_creative_type()
     │       ├── VIDEO → _analyze_video_workflow()
     │       │           ├── download_video()
+    │       │           │     ├── SUCCESS → Full analysis
+    │       │           │     └── FAIL (Page permissions) → _try_library_match()
+    │       │           │                                     ├── Match found → Analyze library video
+    │       │           │                                     └── No match → Metadata-only
     │       │           ├── extract_frames() [ffmpeg]
     │       │           ├── detect_subtitles() [tesseract OCR]
     │       │           ├── analyze_frames() [Claude vision]
@@ -31,6 +35,28 @@ analyze_creative(ad_id)
     │                   └── fetch_performance_metrics()
     │
     └── generate_unified_report()
+
+
+analyze_library_videos(account_id)  [NEW - Indirect Analysis]
+    │
+    ├── _fetch_library_videos()
+    │       └── GET /{account_id}/advideos?fields=id,title,length,source
+    │
+    ├── _fetch_video_ads_with_performance()
+    │       └── GET /{account_id}/ads?fields=name,creative,insights
+    │
+    ├── _match_library_to_ads()
+    │       ├── _extract_name_patterns()
+    │       ├── _match_by_name_keywords()
+    │       └── _match_by_duration()
+    │
+    ├── For each matched video:
+    │       ├── download_video() [from library - no Page permissions needed]
+    │       ├── extract_frames() [ffmpeg]
+    │       ├── detect_subtitles() [tesseract OCR]
+    │       └── _aggregate_ad_performance()
+    │
+    └── generate_combined_report()
 ```
 
 ---
@@ -41,10 +67,12 @@ analyze_creative(ad_id)
 |------|--------|---------|
 | `meta_ads_mcp/core/creative_analysis.py` | **CREATE** | Main module with MCP tools |
 | `meta_ads_mcp/core/video_processing.py` | **CREATE** | Video download, frame extraction, OCR |
+| `meta_ads_mcp/core/library_video_matcher.py` | **CREATE** | Library video to ad matching (Step 8) |
 | `meta_ads_mcp/core/server.py` | **MODIFY** | Import new modules for tool registration |
 | `pyproject.toml` | **MODIFY** | Add dependencies (pytesseract, opencv-python-headless) |
 | `Dockerfile` | **MODIFY** | Add ffmpeg and tesseract-ocr to apt-get install |
 | `tests/test_creative_analysis.py` | **CREATE** | Unit and integration tests |
+| `tests/test_library_video_matcher.py` | **CREATE** | Tests for library matching (Step 8) |
 | `tests/conftest.py` | **MODIFY** | Add mock fixtures |
 
 ---
@@ -428,6 +456,284 @@ FRAME_EXTRACTION_TIMEOUT = int(environ.get("META_ADS_FRAME_EXTRACTION_TIMEOUT", 
 
 ---
 
+### Step 8: Library Video Matching (Indirect Analysis)
+
+**Purpose:** When direct video access requires Page permissions that aren't available, this fallback approach matches ad account library videos to running ads using name and duration patterns, enabling video content analysis combined with ad performance metrics.
+
+**When to Use:**
+- Page-owned videos in ads return error #10 (permission denied)
+- Token only has `ads_read` permission (no `pages_read_engagement`)
+- Ad account has videos in media library (`/advideos` endpoint)
+
+#### Step 8.1: Create `library_video_matcher.py` module
+
+##### Step 8.1.1: Define data structures
+- [ ] Create `LibraryVideo` dataclass:
+  ```python
+  @dataclass
+  class LibraryVideo:
+      id: str
+      title: str
+      duration: float  # seconds
+      source_url: Optional[str]
+      created_time: Optional[str]
+      is_cropped_variant: bool  # True if "cropped_" or "Auto_Cropped_" in title
+  ```
+
+##### Step 8.1.2: Define matching result structures
+- [ ] Create `VideoMatch` dataclass:
+  ```python
+  @dataclass
+  class VideoMatch:
+      library_video: LibraryVideo
+      matched_ads: List[Dict]  # ads using this video (by pattern match)
+      match_confidence: float  # 0.0-1.0 based on name/duration match quality
+      match_method: str  # "name_exact", "name_keyword", "duration_only"
+      aggregated_performance: Dict  # combined metrics from all matched ads
+  ```
+
+##### Step 8.1.3: Define matching configuration
+- [ ] Create `MatchingConfig` dataclass:
+  ```python
+  @dataclass
+  class MatchingConfig:
+      name_patterns: List[Tuple[str, str]]  # (pattern_name, regex)
+      duration_tolerance_seconds: float = 1.0  # match within ±1s
+      min_confidence_threshold: float = 0.5
+      prefer_original_over_cropped: bool = True
+  ```
+
+#### Step 8.2: Implement library video fetching
+
+##### Step 8.2.1: Implement `_fetch_library_videos()`
+- [ ] Call `GET /{account_id}/advideos`
+- [ ] Request fields: `id,title,length,source,created_time`
+- [ ] Handle pagination (limit=50, iterate with cursor)
+- [ ] Filter out videos without source URLs
+- [ ] Mark cropped variants (`is_cropped_variant` flag)
+- [ ] Return `List[LibraryVideo]`
+
+##### Step 8.2.2: Implement `_fetch_video_ads_with_performance()`
+- [ ] Call `GET /{account_id}/ads` with:
+  ```python
+  fields = "id,name,creative{asset_feed_spec,object_story_spec},insights.date_preset({time_range}){impressions,clicks,spend,ctr,cpc,reach,frequency,actions}"
+  filtering = '[{"field":"effective_status","operator":"IN","value":["ACTIVE","PAUSED"]}]'
+  ```
+- [ ] Extract video IDs from `asset_feed_spec.videos`
+- [ ] Parse insights data into performance dict
+- [ ] Return list of ads with video references and performance
+
+#### Step 8.3: Implement pattern matching logic
+
+##### Step 8.3.1: Implement `_extract_name_patterns()`
+- [ ] Define common keyword extraction patterns:
+  ```python
+  KEYWORD_PATTERNS = [
+      ("twijfel", r"twijfel", "doubt/hesitation theme"),
+      ("geen_tijd", r"geen.?tijd|probleem.*tijd", "no time objection"),
+      ("geen_zin", r"geen.?zin", "no motivation objection"),
+      ("review", r"review|testimonial|vrouwelijk|lid", "member testimonial"),
+      ("sportschool_past", r"sportschool.*past|bij.*past", "finding right gym"),
+      ("wist_je", r"wist.?je", "did you know hook"),
+      ("carnaval", r"carnaval", "seasonal/carnival"),
+      ("video_N", r"video.?(\d+)", "numbered video reference"),
+  ]
+  ```
+- [ ] Extract keywords from library video titles
+- [ ] Extract keywords from ad names
+- [ ] Return keyword mappings for both sources
+
+##### Step 8.3.2: Implement `_match_by_name_keywords()`
+- [ ] For each library video:
+  - [ ] Extract keywords from title using regex patterns
+  - [ ] Find ads with matching keywords in name
+  - [ ] Calculate match confidence based on:
+    - Exact keyword match: 1.0
+    - Partial keyword match: 0.7
+    - Multiple keywords match: boost by 0.1 per additional match
+- [ ] Prefer original videos over cropped variants (same content)
+- [ ] Return matches with confidence scores
+
+##### Step 8.3.3: Implement `_match_by_duration()`
+- [ ] For unmatched library videos:
+  - [ ] Group by duration (within tolerance)
+  - [ ] Compare with known ad video durations (if available from thumbnails)
+- [ ] Use as secondary signal to boost confidence
+- [ ] Return duration-based match suggestions
+
+##### Step 8.3.4: Implement `_resolve_best_matches()`
+- [ ] Combine name and duration matches
+- [ ] For each ad, select best matching library video:
+  - [ ] Highest confidence score wins
+  - [ ] Prefer original over cropped variants
+  - [ ] Break ties by: exact match > keyword match > duration match
+- [ ] Filter out matches below `min_confidence_threshold`
+- [ ] Return final `List[VideoMatch]`
+
+#### Step 8.4: Implement performance aggregation
+
+##### Step 8.4.1: Implement `_aggregate_ad_performance()`
+- [ ] For each `VideoMatch`:
+  - [ ] Sum impressions, clicks, spend across all matched ads
+  - [ ] Calculate weighted average CTR: `total_clicks / total_impressions * 100`
+  - [ ] Sum reach (note: may have overlap between ads)
+  - [ ] Calculate average frequency
+  - [ ] Calculate CPC: `total_spend / total_clicks`
+- [ ] Handle edge cases (zero impressions, zero clicks)
+- [ ] Return aggregated metrics dict
+
+##### Step 8.4.2: Implement `_calculate_match_summary()`
+- [ ] Count total library videos
+- [ ] Count matched vs unmatched videos
+- [ ] Calculate total spend across matched videos
+- [ ] Identify top performers by CTR and spend
+- [ ] Return summary statistics
+
+#### Step 8.5: Implement MCP tools
+
+##### Step 8.5.1: Implement `match_library_videos_to_ads()` tool
+```python
+@mcp_server.tool()
+@meta_api_tool
+async def match_library_videos_to_ads(
+    account_id: str,
+    access_token: Optional[str] = None,
+    account_name: Optional[str] = None,
+    time_range: Union[str, Dict[str, str]] = "last_30d",
+    min_confidence: float = 0.5,
+    include_unmatched: bool = False
+) -> str:
+    """
+    Match ad account library videos to running ads using name/duration patterns.
+
+    Use this when direct video access requires Page permissions.
+    Returns library videos with their matched ad performance data.
+
+    Args:
+        account_id: Ad account ID (act_XXX)
+        time_range: Performance data time range
+        min_confidence: Minimum match confidence (0.0-1.0)
+        include_unmatched: Include library videos with no ad matches
+
+    Returns:
+        JSON with matched videos, performance data, and match confidence
+    """
+```
+
+##### Step 8.5.2: Implement `analyze_matched_video()` tool
+```python
+@mcp_server.tool()
+@meta_api_tool
+async def analyze_matched_video(
+    library_video_id: str,
+    account_id: str,
+    access_token: Optional[str] = None,
+    account_name: Optional[str] = None,
+    time_range: Union[str, Dict[str, str]] = "last_30d",
+    extract_frames: bool = True,
+    extract_subtitles: bool = True
+) -> str:
+    """
+    Analyze a library video and combine with matched ad performance.
+
+    Downloads video from library (no Page permissions needed),
+    extracts frames and text, then combines with ad performance data.
+
+    Args:
+        library_video_id: Video ID from advideos library
+        account_id: Ad account ID for performance data
+        time_range: Performance data time range
+        extract_frames: Enable frame extraction (requires ffmpeg)
+        extract_subtitles: Enable OCR text detection (requires tesseract)
+
+    Returns:
+        Complete analysis with video content + ad performance
+    """
+```
+
+##### Step 8.5.3: Implement `analyze_all_matched_videos()` tool
+```python
+@mcp_server.tool()
+@meta_api_tool
+async def analyze_all_matched_videos(
+    account_id: str,
+    access_token: Optional[str] = None,
+    account_name: Optional[str] = None,
+    time_range: Union[str, Dict[str, str]] = "last_30d",
+    limit: int = 10,
+    sort_by: str = "spend"  # "spend", "ctr", "impressions"
+) -> str:
+    """
+    Analyze all matched library videos for an account.
+
+    Matches library videos to ads, then analyzes top performers.
+
+    Args:
+        account_id: Ad account ID
+        time_range: Performance data time range
+        limit: Max videos to analyze (sorted by sort_by)
+        sort_by: Sort matched videos by this metric before limiting
+
+    Returns:
+        Batch analysis with all matched videos and insights
+    """
+```
+
+#### Step 8.6: Implement fallback integration
+
+##### Step 8.6.1: Update `_analyze_video_workflow()` with library fallback
+- [ ] After video download fails with permission error:
+  ```python
+  try:
+      video_bytes = await download_video(video_id, access_token)
+  except PermissionError as e:
+      if "error code 10" in str(e).lower():
+          # Try library match fallback
+          match = await _try_library_match(ad_id, account_id, access_token)
+          if match:
+              return await _analyze_library_video_with_ad_performance(
+                  match.library_video,
+                  match.aggregated_performance
+              )
+      raise
+  ```
+- [ ] Set `analysis_level: "library_match"` in response
+- [ ] Include `match_confidence` in response metadata
+
+##### Step 8.6.2: Implement `_try_library_match()`
+- [ ] Extract video name/keywords from ad creative
+- [ ] Fetch library videos for account
+- [ ] Run matching algorithm
+- [ ] Return best match or None
+
+##### Step 8.6.3: Implement `_analyze_library_video_with_ad_performance()`
+- [ ] Download library video (uses `source` URL, no Page permission needed)
+- [ ] Run standard video analysis (frames, OCR)
+- [ ] Merge with provided ad performance data
+- [ ] Generate insights based on combined data
+- [ ] Return unified analysis result
+
+#### Step 8.7: Testing for library matching
+
+##### Step 8.7.1: Unit tests for matching logic
+- [ ] Test `_extract_name_patterns()` with various title formats
+- [ ] Test `_match_by_name_keywords()` with exact/partial/no matches
+- [ ] Test `_match_by_duration()` with tolerance edge cases
+- [ ] Test `_resolve_best_matches()` with conflicting matches
+- [ ] Test confidence score calculations
+
+##### Step 8.7.2: Integration tests for library matching
+- [ ] Test `match_library_videos_to_ads()` with mocked API responses
+- [ ] Test fallback path in `_analyze_video_workflow()`
+- [ ] Test `analyze_matched_video()` end-to-end with mocked video
+
+##### Step 8.7.3: Add test fixtures
+- [ ] `mock_library_videos` - Sample advideos response
+- [ ] `mock_video_ads_with_insights` - Ads with performance data
+- [ ] `mock_matched_result` - Expected matching output
+
+---
+
 ## Output Schema
 
 ### Single Creative Analysis
@@ -435,7 +741,7 @@ FRAME_EXTRACTION_TIMEOUT = int(environ.get("META_ADS_FRAME_EXTRACTION_TIMEOUT", 
 {
   "ad_id": "string",
   "creative_type": "image|video",
-  "analysis_level": "full|thumbnail_only|metadata_only",
+  "analysis_level": "full|thumbnail_only|metadata_only|library_match",
   "visual_analysis": {
     "dimensions": {"width": 1080, "height": 1080, "aspect_ratio": "1:1"},
     "thumbnail_url": "string",
@@ -475,6 +781,153 @@ FRAME_EXTRACTION_TIMEOUT = int(environ.get("META_ADS_FRAME_EXTRACTION_TIMEOUT", 
 }
 ```
 
+### Library Video Matching Result (Step 8)
+```json
+{
+  "match_summary": {
+    "total_library_videos": 29,
+    "matched_videos": 3,
+    "unmatched_videos": 26,
+    "total_matched_spend": 182.95,
+    "analysis_timestamp": "2026-01-23T21:00:00Z"
+  },
+  "matched_videos": [
+    {
+      "library_video": {
+        "id": "2329104084169972",
+        "title": "Video 2 - Twijfel jij nog_ .mov",
+        "duration_seconds": 9.449,
+        "source_url": "https://...",
+        "is_cropped_variant": false,
+        "created_time": "2025-12-04T10:49:29+0000"
+      },
+      "match_info": {
+        "confidence": 0.95,
+        "method": "name_keyword",
+        "matched_keywords": ["twijfel"],
+        "matched_ad_count": 2
+      },
+      "matched_ads": [
+        {
+          "ad_id": "120237318342120381",
+          "ad_name": "RM | Video twijfel",
+          "status": "ACTIVE"
+        }
+      ],
+      "aggregated_performance": {
+        "time_range": "last_30d",
+        "impressions": 6481,
+        "clicks": 351,
+        "ctr": 5.42,
+        "spend": 80.77,
+        "cpc": 0.23,
+        "reach": 2891,
+        "frequency": 2.2
+      },
+      "content_analysis": {
+        "frames_extracted": 5,
+        "detected_text": [
+          {"timestamp": 0, "text": "Twijfel jij nog?"},
+          {"timestamp": 4, "text": "Probeer nu gratis"}
+        ],
+        "video_metadata": {
+          "resolution": "720x1280",
+          "fps": 30,
+          "codec": "h264"
+        }
+      },
+      "ai_insights": {
+        "strengths": ["High CTR (5.42%)", "Strong hook question"],
+        "weaknesses": ["Short duration may limit message"],
+        "recommendations": [
+          {"priority": "medium", "suggestion": "Test longer version with more detail"}
+        ]
+      }
+    }
+  ],
+  "unmatched_videos": [
+    {
+      "id": "911299351584186",
+      "title": "Auto_Cropped_AR_4_X_5_DCO_Video 8 l Roermond.mov",
+      "duration_seconds": 19.266,
+      "reason": "No matching ad name patterns found"
+    }
+  ],
+  "performance_ranking": {
+    "by_spend": ["twijfel", "review", "geen_tijd"],
+    "by_ctr": ["twijfel", "review", "geen_tijd"],
+    "top_performer": {
+      "pattern": "twijfel",
+      "library_video_id": "2329104084169972",
+      "spend": 80.77,
+      "ctr": 5.42
+    }
+  }
+}
+```
+
+### Analyzed Matched Video Result (Step 8)
+```json
+{
+  "analysis_type": "library_match",
+  "library_video_id": "2622203244807897",
+  "video_details": {
+    "title": "Video 3 - Review lid.mov",
+    "duration_seconds": 23.2,
+    "resolution": "720x1280",
+    "format": "h264",
+    "file_size_kb": 3234.7,
+    "created_time": "2025-12-04T10:49:29+0000"
+  },
+  "content_analysis": {
+    "frames_extracted": 12,
+    "frame_interval_seconds": 2,
+    "detected_text_by_timestamp": {
+      "0-4": ["Fitness Fun inBalans", "persoonlijke begeleiding"],
+      "6-10": ["Milon", "je hebt meer"],
+      "12-20": ["iREACT", "Milon equipment"],
+      "22": ["Boek gratis Proefles"]
+    },
+    "content_structure": {
+      "opening": "Brand intro with tagline",
+      "middle": "Member testimonial with equipment shots",
+      "closing": "Call to action - free trial"
+    }
+  },
+  "matched_ad_performance": {
+    "matched_ads": ["RM | Video vrouwelijk lid", "RM | Video vrouwelijk lid"],
+    "match_confidence": 0.85,
+    "time_range": "last_30d",
+    "impressions": 3599,
+    "reach": 1492,
+    "clicks": 179,
+    "ctr": 4.97,
+    "spend": 55.56,
+    "cpc": 0.31,
+    "frequency": 2.4
+  },
+  "ai_insights": {
+    "strengths": [
+      "Strong CTR (4.97%) above 3% benchmark",
+      "Efficient CPC (€0.31)",
+      "Vertical format optimized for mobile",
+      "Clear CTA at end",
+      "Testimonial format builds trust"
+    ],
+    "weaknesses": [
+      "Duration (23s) on longer side",
+      "CTA appears only at end (22s mark)"
+    ],
+    "recommendations": [
+      {"priority": "high", "suggestion": "Test 15s version with faster pacing"},
+      {"priority": "medium", "suggestion": "Add subtitles for sound-off viewing"},
+      {"priority": "medium", "suggestion": "Move CTA earlier (10-15s mark)"},
+      {"priority": "low", "suggestion": "A/B test different opening hooks"}
+    ]
+  }
+}
+```
+
 ---
 
 ## Verification Plan
@@ -484,14 +937,20 @@ FRAME_EXTRACTION_TIMEOUT = int(environ.get("META_ADS_FRAME_EXTRACTION_TIMEOUT", 
 2. Run `analyze_creative()` on known video ad → verify video metrics
 3. Run `analyze_account_creatives()` → verify batch analysis
 4. Test with invalid ad_id → verify error handling
+5. Run `match_library_videos_to_ads()` → verify matching works (Step 8)
+6. Run `analyze_matched_video()` → verify combined analysis (Step 8)
+7. Test library fallback when Page permission denied → verify graceful fallback (Step 8)
 
 ### Automated Testing
 ```bash
 # Run unit tests (excludes e2e)
 python -m pytest tests/test_creative_analysis.py -v
 
+# Run library matching tests (Step 8)
+python -m pytest tests/test_library_video_matcher.py -v
+
 # Run with coverage
-python -m pytest tests/test_creative_analysis.py -v --cov=meta_ads_mcp.core.creative_analysis
+python -m pytest tests/test_creative_analysis.py tests/test_library_video_matcher.py -v --cov=meta_ads_mcp.core
 
 # Run e2e tests (requires running server)
 python -m pytest tests/test_creative_analysis.py -v -m e2e
@@ -502,6 +961,9 @@ python -m pytest tests/test_creative_analysis.py -v -m e2e
 2. Use Claude Code to call `analyze_creative(ad_id="120237318342120381")`
 3. Verify response includes visual analysis, metrics, and insights
 4. Test HTML dashboard generation with analysis output
+5. Test `match_library_videos_to_ads(account_id="act_238370534780205")` (Step 8)
+6. Verify library matching returns correct video-to-ad associations (Step 8)
+7. Test `analyze_matched_video(library_video_id="2622203244807897")` (Step 8)
 
 ---
 
@@ -540,6 +1002,12 @@ tesseract --version
 | Large videos (>5min) | Max duration limit, frame count caps |
 | API rate limits | Existing rate limiter handles this |
 | Temp file cleanup | Context manager + atexit handler |
+| **Page permission denied (error #10)** | Fall back to library video matching (Step 8) |
+| **No library videos match ads** | Return metadata-only analysis, suggest manual matching |
+| **False positive matches** | Confidence threshold (0.5), prefer exact matches over partial |
+| **Multiple videos match same ad** | Prefer original over cropped, highest confidence wins |
+| **Library videos not in library** | Handle empty advideos gracefully, return clear message |
+| **Name patterns don't match** | Extensible pattern config, duration fallback matching |
 
 ---
 
@@ -553,6 +1021,11 @@ tesseract --version
 - [ ] Unit test coverage > 80%
 - [ ] E2E tests pass against running server
 - [ ] Documentation complete with system requirements
+- [ ] **Library video matching works when Page permissions unavailable (Step 8)**
+- [ ] **`match_library_videos_to_ads()` returns accurate matches with confidence scores (Step 8)**
+- [ ] **`analyze_matched_video()` combines video content with ad performance (Step 8)**
+- [ ] **Fallback from direct video access to library matching is seamless (Step 8)**
+- [ ] **Matching handles cropped/original variants correctly (Step 8)**
 
 ---
 

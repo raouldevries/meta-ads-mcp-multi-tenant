@@ -34,6 +34,7 @@ from . import account_tools  # list_configured_accounts, switch_account, etc.
 
 # Creative analysis
 from . import creative_analysis  # get_creative_type, get_creative_content, analyze_creative
+from . import library_video_matcher  # match_library_videos_to_ads, analyze_matched_video
 
 __all__ = [
     'mcp_server',

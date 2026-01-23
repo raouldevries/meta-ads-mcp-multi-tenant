@@ -328,6 +328,53 @@ async def download_video(
         return None
 
 
+async def download_video_from_url(
+    source_url: str,
+    output_path: Path,
+    timeout: float = 120.0
+) -> Optional[int]:
+    """
+    Download a video directly from a URL.
+
+    Args:
+        source_url: Direct URL to video file
+        output_path: Path to save the downloaded video
+        timeout: Download timeout in seconds
+
+    Returns:
+        File size in bytes if successful, None on failure
+    """
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(
+                source_url,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "curl/8.4.0",
+                    "Accept": "*/*"
+                }
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Failed to download video: HTTP {response.status_code}")
+                return None
+
+            # Write to file
+            with open(output_path, "wb") as f:
+                f.write(response.content)
+
+            file_size = len(response.content)
+            logger.debug(f"Downloaded video: {file_size} bytes to {output_path}")
+            return file_size
+
+    except httpx.TimeoutException:
+        logger.error("Video download timed out")
+        return None
+    except Exception as e:
+        logger.error(f"Error downloading video: {e}")
+        return None
+
+
 async def get_video_metadata_ffprobe(
     video_path: Path
 ) -> Optional[VideoMetadata]:

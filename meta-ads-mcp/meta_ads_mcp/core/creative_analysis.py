@@ -1085,6 +1085,191 @@ def _identify_dropoff_points(
     return dropoffs
 
 
+# =============================================================================
+# Library Video Fallback (Step 8.6)
+# =============================================================================
+
+
+async def _try_library_match(
+    ad_name: str,
+    account_id: str,
+    access_token: str,
+    time_range: Union[str, Dict[str, str]] = "last_30d"
+) -> Optional[Dict[str, Any]]:
+    """
+    Try to find a matching library video for an ad.
+
+    Step 8.6.2: Attempt library video matching when direct video access fails.
+
+    Args:
+        ad_name: Name of the ad (used for keyword matching)
+        account_id: Ad account ID
+        access_token: Meta API access token
+        time_range: Time range for performance data
+
+    Returns:
+        Dict with library_video and match info if found, None otherwise
+    """
+    try:
+        from . import library_video_matcher
+
+        # Fetch library videos
+        library_videos = await library_video_matcher.fetch_library_videos(
+            account_id, access_token, limit=50
+        )
+
+        if not library_videos:
+            logger.debug("No library videos found for fallback matching")
+            return None
+
+        # Extract keywords from ad name
+        config = library_video_matcher.MatchingConfig()
+        ad_keywords = library_video_matcher.extract_keywords(ad_name, config.name_patterns)
+
+        if not ad_keywords:
+            logger.debug(f"No keywords extracted from ad name: {ad_name}")
+            return None
+
+        ad_keyword_names = [k[0] for k in ad_keywords]
+
+        # Find best matching library video
+        best_match = None
+        best_confidence = 0.0
+
+        for video in library_videos:
+            video_keywords = library_video_matcher.extract_keywords(video.title, config.name_patterns)
+            video_keyword_names = [k[0] for k in video_keywords]
+
+            # Calculate overlap
+            shared = set(ad_keyword_names) & set(video_keyword_names)
+            if shared:
+                confidence = len(shared) / max(len(ad_keyword_names), len(video_keyword_names))
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_match = {
+                        "library_video": video,
+                        "matched_keywords": list(shared),
+                        "confidence": confidence
+                    }
+
+        if best_match and best_confidence >= config.min_confidence_threshold:
+            logger.info(f"Library fallback match found: {best_match['library_video'].title} "
+                       f"(confidence: {best_confidence:.2f})")
+            return best_match
+
+        return None
+
+    except Exception as e:
+        logger.warning(f"Library match fallback failed: {e}")
+        return None
+
+
+async def _analyze_with_library_fallback(
+    library_video: Any,
+    match_confidence: float,
+    matched_keywords: List[str],
+    access_token: str,
+    extract_subtitles: bool = False
+) -> Dict[str, Any]:
+    """
+    Analyze a library video as fallback for inaccessible Page-owned video.
+
+    Step 8.6.3: Download and analyze library video content.
+
+    Args:
+        library_video: LibraryVideo object from library_video_matcher
+        match_confidence: Confidence score of the match
+        matched_keywords: Keywords that matched
+        access_token: Meta API access token
+        extract_subtitles: Whether to run OCR
+
+    Returns:
+        Video analysis dict with frames, subtitles, metadata
+    """
+    from . import video_processing
+
+    analysis = {
+        "source": "library_fallback",
+        "library_video_id": library_video.id,
+        "library_video_title": library_video.title,
+        "match_confidence": match_confidence,
+        "matched_keywords": matched_keywords,
+        "duration_seconds": library_video.duration,
+        "frames_extracted": 0,
+        "subtitles_detected": []
+    }
+
+    # Skip if no source URL
+    if not library_video.source_url:
+        logger.warning("Library video has no source URL for download")
+        return analysis
+
+    try:
+        async with video_processing.VideoProcessingContext() as ctx:
+            video_path = ctx.get_video_path("library_video.mp4")
+
+            # Download video from source URL
+            file_size = await video_processing.download_video_from_url(
+                library_video.source_url,
+                video_path
+            )
+
+            if not file_size or not ctx.temp_dir:
+                logger.warning("Failed to download library video")
+                return analysis
+
+            # Get metadata via ffprobe
+            metadata = await video_processing.get_video_metadata_ffprobe(video_path)
+
+            if metadata:
+                analysis["dimensions"] = {
+                    "width": metadata.width,
+                    "height": metadata.height
+                }
+                analysis["fps"] = metadata.fps
+                analysis["codec"] = metadata.codec
+
+            # Extract frames
+            frames = await video_processing.extract_frames(
+                video_path,
+                ctx.temp_dir,
+                video_processing.VideoConfig()
+            )
+
+            analysis["frames_extracted"] = len(frames)
+
+            # Run OCR if enabled
+            if extract_subtitles and frames:
+                subtitles = await video_processing.detect_subtitles_batch(frames[:10])
+                analysis["subtitles_detected"] = [
+                    {
+                        "text": s.text,
+                        "timestamp": s.timestamp,
+                        "confidence": s.confidence
+                    }
+                    for s in subtitles
+                ]
+
+            logger.info(f"Library fallback analysis complete: {len(frames)} frames extracted")
+
+    except Exception as e:
+        logger.warning(f"Library video analysis failed: {e}")
+        analysis["error"] = str(e)
+
+    return analysis
+
+
+def _is_permission_error(error: Exception) -> bool:
+    """Check if an error is a video permission error (error code 10)."""
+    error_str = str(error).lower()
+    return (
+        "error code 10" in error_str or
+        "permission" in error_str or
+        "(#10)" in error_str or
+        "unsupported get request" in error_str
+    )
+
+
 @mcp_server.tool()
 @meta_api_tool
 async def analyze_video_creative(
@@ -1116,6 +1301,9 @@ async def analyze_video_creative(
     Returns:
         JSON with complete video creative analysis
     """
+    # Token is resolved by @meta_api_tool decorator
+    assert access_token is not None, "access_token required"
+
     if not ad_id:
         return json.dumps({"error": "No ad ID provided"}, indent=2)
 
@@ -1181,6 +1369,7 @@ async def analyze_video_creative(
                 analysis_level = AnalysisLevel.THUMBNAIL_ONLY.value
 
         # Optionally process video frames
+        library_fallback_used = False
         if extract_frames and video_id and account_id:
             ffmpeg_ok, _ = check_ffmpeg_available()
             if ffmpeg_ok:
@@ -1208,6 +1397,45 @@ async def analyze_video_creative(
 
                 except Exception as e:
                     logger.warning(f"Video processing failed: {e}")
+
+                    # Step 8.6.1: Try library fallback on permission errors
+                    if _is_permission_error(e):
+                        ad_name = ad_data.get("name", "")
+                        logger.info(f"Permission error detected, trying library fallback for: {ad_name}")
+
+                        match = await _try_library_match(
+                            ad_name=ad_name,
+                            account_id=account_id,
+                            access_token=access_token,
+                            time_range=time_range
+                        )
+
+                        if match:
+                            library_fallback_used = True
+                            fallback_analysis = await _analyze_with_library_fallback(
+                                library_video=match["library_video"],
+                                match_confidence=match["confidence"],
+                                matched_keywords=match["matched_keywords"],
+                                access_token=access_token,
+                                extract_subtitles=extract_subtitles
+                            )
+
+                            # Update video_analysis with fallback data
+                            video_analysis["source"] = "library_fallback"
+                            video_analysis["library_video_id"] = fallback_analysis.get("library_video_id")
+                            video_analysis["library_video_title"] = fallback_analysis.get("library_video_title")
+                            video_analysis["match_confidence"] = fallback_analysis.get("match_confidence")
+                            video_analysis["matched_keywords"] = fallback_analysis.get("matched_keywords")
+                            video_analysis["frames_extracted"] = fallback_analysis.get("frames_extracted", 0)
+                            video_analysis["subtitles_detected"] = fallback_analysis.get("subtitles_detected", [])
+
+                            if fallback_analysis.get("dimensions"):
+                                video_analysis["dimensions"] = fallback_analysis["dimensions"]
+
+                            if fallback_analysis.get("frames_extracted", 0) > 0:
+                                analysis_level = "library_match"
+
+                            logger.info(f"Library fallback successful: {fallback_analysis.get('library_video_title')}")
 
         # Fetch video retention metrics
         video_metrics = await _fetch_video_retention_metrics(ad_id, time_range, access_token)

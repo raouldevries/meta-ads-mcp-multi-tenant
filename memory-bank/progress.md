@@ -451,6 +451,143 @@ Updated README.md with creative analysis documentation and system requirements.
 
 ---
 
+## Step 8: Library Video Matching ✅
+
+**Plan Reference:** `memory-bank/creative-analysis-plan.md` (Step 8)
+**Status:** Complete
+**Completed:** 2026-01-23
+
+### Overview
+
+Added indirect video analysis capability that matches ad account library videos to running ads using name and duration patterns. This enables video content analysis combined with ad performance metrics even when direct video access requires Page permissions that aren't available.
+
+### Use Cases
+
+- Page-owned videos in ads return error #10 (permission denied)
+- Token only has `ads_read` permission (no `pages_read_engagement`)
+- Ad account has videos in media library (`/advideos` endpoint)
+
+### File Created
+
+| File | Purpose |
+|------|---------|
+| `meta_ads_mcp/core/library_video_matcher.py` | Library video matching module (~850 lines) |
+| `tests/test_library_video_matcher.py` | Unit tests (45 tests) |
+
+### Data Structures Implemented
+
+| Component | Description |
+|-----------|-------------|
+| `MatchMethod` | Enum: NAME_EXACT, NAME_KEYWORD, DURATION_ONLY, COMBINED |
+| `LibraryVideo` | Dataclass for videos from /advideos endpoint |
+| `VideoAdInfo` | Dataclass for video ads with performance |
+| `VideoMatch` | Matching result with confidence score |
+| `MatchingConfig` | Configuration for matching algorithm |
+| `MatchSummary` | Summary statistics for matching operation |
+
+### Functions Implemented
+
+| Function | Purpose |
+|----------|---------|
+| `fetch_library_videos()` | Fetch videos from /advideos endpoint with pagination |
+| `fetch_video_ads_with_performance()` | Fetch video ads with nested insights |
+| `extract_keywords()` | Extract pattern keywords from text |
+| `match_by_name_keywords()` | Match videos to ads by shared keywords |
+| `aggregate_ad_performance()` | Aggregate metrics across matched ads |
+| `calculate_match_summary()` | Calculate summary statistics |
+
+### MCP Tools Added (3 total)
+
+| Tool | Description |
+|------|-------------|
+| `match_library_videos_to_ads` | Match library videos to running ads by name patterns |
+| `analyze_matched_video` | Full analysis of matched video with performance |
+| `analyze_all_matched_videos` | Batch analysis of all matched videos |
+
+### Default Keyword Patterns
+
+| Pattern | Regex | Description |
+|---------|-------|-------------|
+| `twijfel` | `r"twijfel"` | Doubt/hesitation theme |
+| `geen_tijd` | `r"geen.?tijd\|probleem.*tijd"` | No time objection |
+| `geen_zin` | `r"geen.?zin"` | No motivation objection |
+| `review` | `r"review\|testimonial\|vrouwelijk\|lid"` | Member testimonial |
+| `sportschool_past` | `r"sportschool.*past\|bij.*past"` | Finding right gym |
+| `wist_je` | `r"wist.?je"` | Did you know hook |
+| `carnaval` | `r"carnaval"` | Seasonal/carnival |
+| `video_num` | `r"video.?\s*(\d+)"` | Numbered video reference |
+
+### Test Results
+
+| File | Tests | Status |
+|------|-------|--------|
+| `tests/test_library_video_matcher.py` | 45 | ✅ All passed |
+
+### Integration Verified
+
+| Check | Status |
+|-------|--------|
+| `library_video_matcher` imported in `__init__.py` | ✅ Line 37 |
+| All import dependencies resolved | ✅ |
+| All 45 unit tests pass | ✅ |
+
+---
+
+## Step 8.6: Fallback Integration ✅
+
+**Status:** Complete
+**Completed:** 2026-01-23
+
+### Overview
+
+Integrated library video matching as an automatic fallback in `analyze_video_creative()`. When direct video access fails with permission error (error #10), the system automatically tries to match a library video and uses it for analysis.
+
+### Functions Added to creative_analysis.py
+
+| Function | Purpose |
+|----------|---------|
+| `_try_library_match()` | Find matching library video by keyword patterns |
+| `_analyze_with_library_fallback()` | Download and analyze library video |
+| `_is_permission_error()` | Detect permission errors (code 10) |
+
+### How It Works
+
+1. `analyze_video_creative()` attempts to process video via `process_video()`
+2. If permission error detected, calls `_try_library_match()` with ad name
+3. Extracts keywords from ad name (twijfel, review, geen_tijd, etc.)
+4. Matches against library video titles
+5. If match found with confidence >= 0.5, downloads library video
+6. Runs frame extraction and OCR on library video
+7. Returns analysis with `analysis_level: "library_match"`
+
+### Response Fields Added
+
+```json
+{
+  "video_analysis": {
+    "source": "library_fallback",
+    "library_video_id": "123456789",
+    "library_video_title": "Video 3 - Review lid.mov",
+    "match_confidence": 0.85,
+    "matched_keywords": ["review"]
+  }
+}
+```
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `meta_ads_mcp/core/creative_analysis.py` | Added 3 helper functions, fallback logic |
+| `meta_ads_mcp/core/video_processing.py` | Added `download_video_from_url()` |
+
+### Tests
+
+- 123 tests pass (creative_analysis + video_processing + library_video_matcher)
+- Pyright: 0 errors in library_video_matcher.py
+
+---
+
 ## Git Commits (Multi-Tenant)
 
 | Commit | Description |
