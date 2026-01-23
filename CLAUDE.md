@@ -74,7 +74,60 @@ Token precedence: `META_ACCESS_TOKEN` env var > OAuth flow > cached token
 - `insights.py` - Performance metrics and reporting
 - `targeting.py` - Audience targeting (interests, behaviors, demographics, geo)
 
-### Required Environment Variables
+### Authentication Modes
+
+The server supports two authentication modes:
+
+1. **Multi-tenant mode (recommended)** - Uses `credentials.json` for multiple business portfolios
+2. **Legacy mode** - Uses `.env` file for single account (backward compatible)
+
+## Multi-Tenant Credentials Setup
+
+### Credentials File Location (Cross-Platform)
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/meta-ads-mcp/credentials.json` |
+| Windows | `%APPDATA%\meta-ads-mcp\credentials.json` |
+| Linux | `~/.config/meta-ads-mcp/credentials.json` |
+
+### credentials.json Schema (v2)
+
+```json
+{
+  "version": 2,
+  "api_keys": {
+    "business_name": {
+      "access_token": "YOUR_ACCESS_TOKEN_HERE"
+    }
+  },
+  "accounts": {
+    "account_key": {
+      "display_name": "Friendly Account Name",
+      "ad_account_id": "act_XXXXXXXXX",
+      "api_key": "business_name"
+    }
+  }
+}
+```
+
+### Structure Explanation
+
+- **api_keys**: Store access tokens per business portfolio. The key name links to accounts below.
+- **accounts**: Map friendly names to ad accounts. `api_key` references which token to use.
+
+Multiple ad accounts can share the same token (same business portfolio):
+
+```json
+"accounts": {
+  "location_a": { "ad_account_id": "act_111", "api_key": "my_business" },
+  "location_b": { "ad_account_id": "act_222", "api_key": "my_business" }
+}
+```
+
+### Legacy Environment Variables (Single Account)
+
+For backward compatibility, you can still use `.env`:
 - `META_ACCESS_TOKEN` - Meta API access token
 - `META_APP_ID` - Meta App ID (for OAuth flows)
 - `META_AD_ACCOUNT_ID` - Default ad account ID (format: act_XXXXXXXXX)
@@ -83,7 +136,8 @@ Token precedence: `META_ACCESS_TOKEN` env var > OAuth flow > cached token
 
 | File | Purpose |
 |------|---------|
-| `meta-ads-mcp/.env` | Local environment variables (tokens, app IDs) |
+| `credentials.json` | Multi-tenant credentials (see paths above) |
+| `meta-ads-mcp/.env` | Legacy single-account config (optional) |
 | `meta-ads-mcp/pyproject.toml` | Package dependencies and pytest config |
 | `~/Library/Application Support/Claude/claude_desktop_config.json` | Claude Desktop MCP config |
 
