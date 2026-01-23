@@ -150,7 +150,7 @@ Integrated credential management into server startup with preflight validation.
 | Step | Description | Status |
 |------|-------------|--------|
 | Step 1 | Core Infrastructure | ✅ |
-| Step 2 | Image Analysis | ⏳ Pending |
+| Step 2 | Image Analysis | ✅ |
 | Step 3 | Video Processing Module | ⏳ Pending |
 | Step 4 | Video Analysis Integration | ⏳ Pending |
 | Step 5 | Main Tools & Insights | ⏳ Pending |
@@ -206,6 +206,43 @@ Created the main `creative_analysis.py` module with foundational components.
 
 - Video ad: Correctly detected as VIDEO, extracted 9 headlines, 8 body texts
 - Image ad: Correctly detected as IMAGE, extracted content from asset_feed_spec
+
+---
+
+### Step 2: Image Analysis ✅
+
+**Completed:** 2026-01-23
+
+Added image analysis functionality with performance metrics and account benchmarks.
+
+#### Helper Functions Added
+
+| Function | Purpose |
+|----------|---------|
+| `_parse_performance_metrics()` | Convert raw API metrics to PerformanceMetrics dataclass |
+| `_fetch_image_analysis()` | Extract image URLs, dimensions, and hash from creative |
+| `_calculate_benchmarks()` | Fetch account-level avg/percentile metrics |
+| `_compare_to_benchmarks()` | Compare creative metrics to account benchmarks |
+
+#### MCP Tools Added
+
+| Tool | Description |
+|------|-------------|
+| `analyze_image_creative(ad_id)` | Full image analysis with metrics and benchmarks |
+| `get_account_benchmarks(account_id)` | Get CTR/CPC/CPM benchmarks for account |
+
+#### Features
+
+- **Image Analysis:** Extracts dimensions (width/height/aspect_ratio), image hash, URLs
+- **Performance Metrics:** Impressions, clicks, CTR, spend, CPC, CPM, reach, frequency
+- **Benchmark Comparison:** Compare to account avg, determine performance tier (top/middle/bottom)
+- **Analysis Levels:** FULL (with dimensions), THUMBNAIL_ONLY, METADATA_ONLY
+
+#### Tested With Real API
+
+- Image ad (1080x1080, 1:1): Retrieved dimensions, hash, 2 image URLs
+- Performance metrics: 5,326 impressions, 2.23% CTR
+- Analysis level: FULL
 
 ---
 
