@@ -1,0 +1,79 @@
+{
+  "meta_description": "Industry benchmarks for Meta Ads performance metrics",
+  "last_updated": "2026-01-24",
+  "source": "Aggregated from industry reports and account data",
+
+  "global_averages": {
+    "ctr": {
+      "all_industries": 0.90,
+      "fitness": 1.20,
+      "ecommerce": 1.10,
+      "saas": 0.80,
+      "local_services": 1.50
+    },
+    "cpc": {
+      "all_industries": 1.72,
+      "fitness": 1.45,
+      "ecommerce": 0.98,
+      "saas": 2.50,
+      "local_services": 1.20
+    },
+    "cpm": {
+      "all_industries": 14.50,
+      "fitness": 12.00,
+      "ecommerce": 10.50,
+      "saas": 20.00,
+      "local_services": 8.50
+    }
+  },
+
+  "video_metrics": {
+    "thruplay_rate": {
+      "excellent": 0.25,
+      "good": 0.15,
+      "average": 0.10,
+      "poor": 0.05
+    },
+    "hook_retention_3s": {
+      "excellent": 0.70,
+      "good": 0.55,
+      "average": 0.40,
+      "poor": 0.25
+    },
+    "watch_completion_rate": {
+      "15s_video": 0.35,
+      "30s_video": 0.20,
+      "60s_video": 0.10
+    }
+  },
+
+  "image_metrics": {
+    "engagement_rate": {
+      "with_face": 1.38,
+      "without_face": 1.00
+    },
+    "ctr_multiplier": {
+      "eye_contact": 1.15,
+      "smiling": 1.12,
+      "authentic_vs_stock": 1.25
+    }
+  },
+
+  "frequency_thresholds": {
+    "optimal": 1.5,
+    "warning": 2.5,
+    "fatigue": 4.0
+  },
+
+  "platform_safe_zones": {
+    "stories_reels": {
+      "top_unsafe_percent": 14,
+      "bottom_unsafe_percent": 14,
+      "safe_zone_percent": 72
+    },
+    "feed": {
+      "text_coverage_max_percent": 20,
+      "text_coverage_optimal_percent": 10
+    }
+  }
+}
