@@ -1582,10 +1582,35 @@ def _estimate_retention_at_time(content_map: List[ContentRetentionMapping], time
 # =============================================================================
 
 
+def _extract_duration_from_retention_curve(video_metrics: Optional[Dict[str, Any]]) -> Optional[float]:
+    """
+    Extract video duration from retention curve.
+
+    The retention curve is an array where each element represents retention % at that second.
+    The length of the array equals the video duration in seconds.
+
+    Args:
+        video_metrics: Dict containing retention_curve from video metrics
+
+    Returns:
+        Video duration in seconds, or None if not available
+    """
+    if not video_metrics:
+        return None
+
+    retention_curve = video_metrics.get("retention_curve")
+    if retention_curve and isinstance(retention_curve, list) and len(retention_curve) > 0:
+        return float(len(retention_curve))
+
+    return None
+
+
 async def _try_library_match(
     ad_name: str,
     account_id: str,
     access_token: str,
+    ad_video_duration: Optional[float] = None,
+    duration_tolerance: float = 1.5,
     time_range: Union[str, Dict[str, str]] = "last_30d"
 ) -> Optional[Dict[str, Any]]:
     """
@@ -1593,10 +1618,17 @@ async def _try_library_match(
 
     Step 8.6.2: Attempt library video matching when direct video access fails.
 
+    Uses a two-step matching process:
+    1. DURATION FILTER (hard requirement): If ad_video_duration is known, only consider
+       library videos within ±duration_tolerance seconds. Different duration = different video.
+    2. KEYWORD MATCH: Among duration-matched candidates, rank by keyword overlap.
+
     Args:
         ad_name: Name of the ad (used for keyword matching)
         account_id: Ad account ID
         access_token: Meta API access token
+        ad_video_duration: Duration of the ad's video in seconds (if known)
+        duration_tolerance: Allowed difference in seconds for duration matching (default ±1.5s)
         time_range: Time range for performance data
 
     Returns:
@@ -1614,40 +1646,106 @@ async def _try_library_match(
             logger.debug("No library videos found for fallback matching")
             return None
 
-        # Extract keywords from ad name
+        # STEP 1: Duration filter (hard requirement when duration is known)
+        if ad_video_duration is not None and ad_video_duration > 0:
+            duration_matched = [
+                v for v in library_videos
+                if abs(v.duration - ad_video_duration) <= duration_tolerance
+            ]
+            logger.debug(
+                f"Duration filter: {len(duration_matched)}/{len(library_videos)} videos "
+                f"match ±{duration_tolerance}s of {ad_video_duration}s"
+            )
+
+            if not duration_matched:
+                logger.info(
+                    f"No library videos match duration {ad_video_duration}s (±{duration_tolerance}s). "
+                    f"Library durations: {[v.duration for v in library_videos[:5]]}..."
+                )
+                return None
+
+            candidates = duration_matched
+        else:
+            # Duration unknown - fall back to all videos (keyword-only matching)
+            logger.debug("Ad video duration unknown, using keyword-only matching")
+            candidates = library_videos
+
+        # STEP 2: Keyword matching among candidates
         config = library_video_matcher.MatchingConfig()
         ad_keywords = library_video_matcher.extract_keywords(ad_name, config.name_patterns)
 
+        # If no keywords, but we have duration match, still return best duration match
         if not ad_keywords:
+            if ad_video_duration is not None and candidates:
+                # Return closest duration match even without keyword match
+                closest = min(candidates, key=lambda v: abs(v.duration - ad_video_duration))
+                logger.info(
+                    f"No keywords extracted, returning closest duration match: "
+                    f"{closest.title} ({closest.duration}s)"
+                )
+                return {
+                    "library_video": closest,
+                    "matched_keywords": [],
+                    "confidence": 0.7,  # Duration-only match
+                    "match_method": "duration_only"
+                }
             logger.debug(f"No keywords extracted from ad name: {ad_name}")
             return None
 
         ad_keyword_names = [k[0] for k in ad_keywords]
 
-        # Find best matching library video
+        # Find best matching library video among candidates
         best_match = None
         best_confidence = 0.0
 
-        for video in library_videos:
+        for video in candidates:
             video_keywords = library_video_matcher.extract_keywords(video.title, config.name_patterns)
             video_keyword_names = [k[0] for k in video_keywords]
 
-            # Calculate overlap
+            # Calculate keyword overlap
             shared = set(ad_keyword_names) & set(video_keyword_names)
             if shared:
-                confidence = len(shared) / max(len(ad_keyword_names), len(video_keyword_names))
+                keyword_confidence = len(shared) / max(len(ad_keyword_names), len(video_keyword_names))
+
+                # Boost confidence if duration also matches
+                if ad_video_duration is not None:
+                    duration_diff = abs(video.duration - ad_video_duration)
+                    # Perfect duration match (within 0.5s) gets full boost
+                    duration_boost = 0.1 if duration_diff <= 0.5 else 0.05
+                    confidence = min(keyword_confidence + duration_boost, 1.0)
+                else:
+                    confidence = keyword_confidence
+
                 if confidence > best_confidence:
                     best_confidence = confidence
                     best_match = {
                         "library_video": video,
                         "matched_keywords": list(shared),
-                        "confidence": confidence
+                        "confidence": confidence,
+                        "match_method": "duration_and_keywords" if ad_video_duration else "keywords_only",
+                        "duration_diff": abs(video.duration - ad_video_duration) if ad_video_duration else None
                     }
 
         if best_match and best_confidence >= config.min_confidence_threshold:
-            logger.info(f"Library fallback match found: {best_match['library_video'].title} "
-                       f"(confidence: {best_confidence:.2f})")
+            logger.info(
+                f"Library fallback match found: {best_match['library_video'].title} "
+                f"(confidence: {best_confidence:.2f}, method: {best_match['match_method']})"
+            )
             return best_match
+
+        # If duration matched but no keyword match, return best duration match with lower confidence
+        if ad_video_duration is not None and candidates:
+            closest = min(candidates, key=lambda v: abs(v.duration - ad_video_duration))
+            logger.info(
+                f"No keyword match, returning closest duration match: "
+                f"{closest.title} ({closest.duration}s)"
+            )
+            return {
+                "library_video": closest,
+                "matched_keywords": [],
+                "confidence": 0.6,  # Duration-only, no keywords
+                "match_method": "duration_only"
+            }
 
         return None
 
@@ -1840,13 +1938,15 @@ async def analyze_video_creative(
         }
 
         # Fetch video metadata if we have video_id
+        video_meta_duration = None
         if video_id:
             video_endpoint = f"{video_id}"
             video_params = {"fields": "length,width,height,source"}
             video_meta = await make_api_request(video_endpoint, access_token, video_params)
 
             if "error" not in video_meta:
-                video_analysis["duration_seconds"] = float(video_meta.get("length", 0))
+                video_meta_duration = float(video_meta.get("length", 0))
+                video_analysis["duration_seconds"] = video_meta_duration
                 width = video_meta.get("width")
                 height = video_meta.get("height")
                 if width and height:
@@ -1859,6 +1959,19 @@ async def analyze_video_creative(
                         "aspect_ratio": aspect_ratio
                     }
                 analysis_level = AnalysisLevel.THUMBNAIL_ONLY.value
+
+        # Fetch video retention metrics EARLY (needed for duration in library fallback)
+        video_metrics = await _fetch_video_retention_metrics(ad_id, time_range, access_token)
+
+        # Determine video duration from best available source
+        # Priority: video metadata > retention curve length
+        ad_video_duration = video_meta_duration
+        if not ad_video_duration or ad_video_duration <= 0:
+            retention_duration = _extract_duration_from_retention_curve(video_metrics)
+            if retention_duration:
+                ad_video_duration = retention_duration
+                video_analysis["duration_seconds"] = retention_duration
+                logger.debug(f"Using duration from retention curve: {retention_duration}s")
 
         # Optionally process video frames
         library_fallback_used = False
@@ -1893,12 +2006,17 @@ async def analyze_video_creative(
                     # Step 8.6.1: Try library fallback on permission errors
                     if _is_permission_error(e):
                         ad_name = ad_data.get("name", "")
-                        logger.info(f"Permission error detected, trying library fallback for: {ad_name}")
+                        logger.info(
+                            f"Permission error detected, trying library fallback for: {ad_name} "
+                            f"(duration: {ad_video_duration}s)"
+                        )
 
+                        # Pass video duration for accurate matching
                         match = await _try_library_match(
                             ad_name=ad_name,
                             account_id=account_id,
                             access_token=access_token,
+                            ad_video_duration=ad_video_duration,
                             time_range=time_range
                         )
 
@@ -1918,6 +2036,7 @@ async def analyze_video_creative(
                             video_analysis["library_video_title"] = fallback_analysis.get("library_video_title")
                             video_analysis["match_confidence"] = fallback_analysis.get("match_confidence")
                             video_analysis["matched_keywords"] = fallback_analysis.get("matched_keywords")
+                            video_analysis["match_method"] = match.get("match_method", "unknown")
                             video_analysis["frames_extracted"] = fallback_analysis.get("frames_extracted", 0)
                             video_analysis["subtitles_detected"] = fallback_analysis.get("subtitles_detected", [])
 
@@ -1927,10 +2046,10 @@ async def analyze_video_creative(
                             if fallback_analysis.get("frames_extracted", 0) > 0:
                                 analysis_level = "library_match"
 
-                            logger.info(f"Library fallback successful: {fallback_analysis.get('library_video_title')}")
-
-        # Fetch video retention metrics
-        video_metrics = await _fetch_video_retention_metrics(ad_id, time_range, access_token)
+                            logger.info(
+                                f"Library fallback successful: {fallback_analysis.get('library_video_title')} "
+                                f"(method: {match.get('match_method')})"
+                            )
 
         # Fetch standard performance metrics
         raw_metrics = await _fetch_performance_metrics(ad_id, time_range, access_token)
