@@ -10,13 +10,31 @@ This is a Meta Ads Analyzer project that uses a self-hosted Meta Ads MCP (Model 
 
 ```
 Meta Ads Analyzer/
-├── meta-ads-mcp/           # Cloned from pipeboard-co/meta-ads-mcp
+├── meta-ads-mcp/           # MCP server package (connectivity)
 │   ├── meta_ads_mcp/       # Main Python package
 │   │   └── core/           # Core modules (server, auth, API tools)
 │   ├── tests/              # Integration and unit tests
 │   └── venv/               # Python virtual environment
+├── skills/                 # Agent skills (expertise)
+│   └── creative-analyzer/  # Creative analysis methodology
+├── reports/                # Generated HTML analysis reports
 └── memory-bank/            # Project documentation and progress tracking
 ```
+
+## Architecture: MCP Server + Skills
+
+This project uses two complementary layers:
+
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| **MCP Server** | `meta-ads-mcp/` | Connectivity - tools to fetch data from Meta API |
+| **Skills** | `skills/` | Expertise - methodology for analyzing that data |
+
+```
+User Question → Claude → MCP Server (fetch data) + Skill (analyze data) → Insights
+```
+
+See `skills/creative-analyzer/README.md` for detailed architecture diagrams.
 
 ## Development Commands
 
@@ -191,7 +209,13 @@ get_active_ads_analysis(account_id="act_123456789", time_range="last_30d", perfo
 
 ## Creative Analysis
 
-When analyzing ad creatives (video or image), follow the detailed methodology in `memory-bank/creative-analyzer-agent.md`.
+When analyzing ad creatives (video or image), use the creative-analyzer skill in `skills/creative-analyzer/`.
+
+**Skill Structure:**
+- `skill.md` - Entry point, triggers, metadata
+- `workflows/video-analysis.md` - Video analysis methodology
+- `workflows/image-analysis.md` - Image analysis methodology
+- `data/benchmarks.json` - Industry performance benchmarks
 
 ### Quick Reference
 
