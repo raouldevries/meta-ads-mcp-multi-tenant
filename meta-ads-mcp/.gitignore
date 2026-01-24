@@ -36,8 +36,9 @@ uv.lock
 venv/
 .env
 
-# Local HTML charts/dashboards
+# Local HTML charts/dashboards (except reports folder)
 *.html
+!reports/*.html
 
 # Claude-mem auto-generated files
 CLAUDE.md
