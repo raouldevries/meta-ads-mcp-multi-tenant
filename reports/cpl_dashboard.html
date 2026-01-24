@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My35' Cost Per Lead Dashboard - Last 7 Days</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 30px;
+            color: #fff;
+        }
+        .container { max-width: 1600px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { text-align: center; color: #888; margin-bottom: 30px; }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .stat-card h3 { font-size: 0.75rem; color: #888; margin-bottom: 8px; text-transform: uppercase; }
+        .stat-card .value { font-size: 1.6rem; font-weight: bold; color: #667eea; }
+        .stat-card .value.good { color: #00f260; }
+        .stat-card .value.bad { color: #f5576c; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .chart-box {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .chart-box h2 { font-size: 1.1rem; margin-bottom: 20px; color: #ccc; }
+
+        .table-container {
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255,255,255,0.1);
+            overflow-x: auto;
+        }
+        .table-container h2 { font-size: 1.1rem; margin-bottom: 20px; color: #ccc; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { text-align: left; padding: 12px 10px; color: #888; border-bottom: 1px solid rgba(255,255,255,0.1); font-weight: 500; }
+        td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        tr:hover { background: rgba(255,255,255,0.03); }
+        .location-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .cpl-good { color: #00f260; }
+        .cpl-medium { color: #fee140; }
+        .cpl-bad { color: #f5576c; }
+        .no-leads { color: #666; font-style: italic; }
+
+        .insights-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 30px; }
+        .insight-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .insight-card.best { border-left: 4px solid #00f260; }
+        .insight-card.worst { border-left: 4px solid #f5576c; }
+        .insight-card.info { border-left: 4px solid #667eea; }
+        .insight-card h3 { font-size: 0.85rem; color: #888; margin-bottom: 10px; }
+        .insight-card .campaign { font-size: 1rem; font-weight: bold; color: #fff; margin-bottom: 5px; }
+        .insight-card .details { font-size: 0.85rem; color: #aaa; }
+        .insight-card .metric { font-size: 1.3rem; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cost Per Lead Dashboard</h1>
+        <p class="subtitle">All My35' Locations (Jan 16 - Jan 22, 2026)</p>
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <h3>Total Spend</h3>
+                <div class="value">€1,956.23</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Leads</h3>
+                <div class="value">50</div>
+            </div>
+            <div class="stat-card">
+                <h3>Avg CPL</h3>
+                <div class="value">€39.12</div>
+            </div>
+            <div class="stat-card">
+                <h3>Best CPL</h3>
+                <div class="value good">€12.04</div>
+            </div>
+            <div class="stat-card">
+                <h3>Campaigns</h3>
+                <div class="value">24</div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <div class="chart-box">
+                <h2>📊 CPL by Location (Lower is Better)</h2>
+                <canvas id="cplByLocation"></canvas>
+            </div>
+            <div class="chart-box">
+                <h2>📈 Leads vs Spend by Location</h2>
+                <canvas id="leadsVsSpend"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-box" style="margin-bottom: 30px;">
+            <h2>💰 CPL by Campaign (Campaigns with Leads Only)</h2>
+            <canvas id="cplByCampaign"></canvas>
+        </div>
+
+        <div class="table-container">
+            <h2>📋 All Campaigns Performance</h2>
+            <table id="campaignTable">
+                <thead>
+                    <tr>
+                        <th>Location</th>
+                        <th>Campaign</th>
+                        <th>Spend</th>
+                        <th>Leads</th>
+                        <th>CPL</th>
+                        <th>Clicks</th>
+                        <th>CTR</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="insights-grid">
+            <div class="insight-card best">
+                <h3>🏆 Best Performing Campaign</h3>
+                <div class="campaign">Challengers | Nijmegen | CBO</div>
+                <div class="details">Elst & Nijmegen • 3 leads • €36.12 spend</div>
+                <div class="metric cpl-good">€12.04 CPL</div>
+            </div>
+            <div class="insight-card best">
+                <h3>💎 Best Location (Avg CPL)</h3>
+                <div class="campaign">Nuth</div>
+                <div class="details">9 leads • €172.61 spend • 3 campaigns</div>
+                <div class="metric cpl-good">€19.18 CPL</div>
+            </div>
+            <div class="insight-card worst">
+                <h3>⚠️ Needs Attention</h3>
+                <div class="campaign">Challengers | Elst | CBO</div>
+                <div class="details">Elst & Nijmegen • 1 lead • €127.84 spend</div>
+                <div class="metric cpl-bad">€127.84 CPL</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const campaigns = [
+            { location: "Echt", campaign: "RM | ABO", spend: 47.64, leads: 3, cpl: 15.88, clicks: 193, ctr: 6.02 },
+            { location: "Echt", campaign: "Leads | ABO", spend: 129.81, leads: 3, cpl: 43.27, clicks: 567, ctr: 4.55 },
+            { location: "Weert", campaign: "RM | ABO", spend: 34.18, leads: 1, cpl: 34.18, clicks: 141, ctr: 5.09 },
+            { location: "Weert", campaign: "Leads | ABO", spend: 108.32, leads: 0, cpl: 0, clicks: 365, ctr: 2.73 },
+            { location: "Budel", campaign: "Leads | CBO", spend: 83.32, leads: 0, cpl: 0, clicks: 299, ctr: 2.91 },
+            { location: "Budel", campaign: "RM | ABO", spend: 37.36, leads: 0, cpl: 0, clicks: 129, ctr: 3.58 },
+            { location: "Blerick 2.0", campaign: "RM | ABO", spend: 63.41, leads: 1, cpl: 63.41, clicks: 187, ctr: 3.45 },
+            { location: "Blerick 2.0", campaign: "Leads | ABO", spend: 73.75, leads: 1, cpl: 73.75, clicks: 214, ctr: 2.79 },
+            { location: "Roermond", campaign: "RM | ABO", spend: 31.53, leads: 0, cpl: 0, clicks: 116, ctr: 4.60 },
+            { location: "Roermond", campaign: "Leads | ABO", spend: 152.45, leads: 6, cpl: 25.41, clicks: 385, ctr: 2.31 },
+            { location: "Elst & Nijmegen", campaign: "RM | Nijmegen | ABO", spend: 53.70, leads: 1, cpl: 53.70, clicks: 93, ctr: 3.52 },
+            { location: "Elst & Nijmegen", campaign: "RM | Elst | ABO", spend: 53.06, leads: 2, cpl: 26.53, clicks: 151, ctr: 5.69 },
+            { location: "Elst & Nijmegen", campaign: "Challengers | Elst | CBO", spend: 127.84, leads: 1, cpl: 127.84, clicks: 247, ctr: 2.75 },
+            { location: "Elst & Nijmegen", campaign: "Winners | Nijmegen | ABO", spend: 357.47, leads: 9, cpl: 39.72, clicks: 582, ctr: 2.43 },
+            { location: "Elst & Nijmegen", campaign: "Challengers | Nijmegen | CBO", spend: 36.12, leads: 3, cpl: 12.04, clicks: 45, ctr: 2.28 },
+            { location: "Sittard", campaign: "RM | ABO", spend: 3.49, leads: 0, cpl: 0, clicks: 10, ctr: 3.98 },
+            { location: "Sittard", campaign: "Leads | CBO", spend: 34.88, leads: 2, cpl: 17.44, clicks: 213, ctr: 5.37 },
+            { location: "Nuth", campaign: "BenFit | CBO", spend: 55.42, leads: 4, cpl: 13.86, clicks: 91, ctr: 2.74 },
+            { location: "Nuth", campaign: "Leads | CBO", spend: 73.60, leads: 4, cpl: 18.40, clicks: 219, ctr: 3.20 },
+            { location: "Nuth", campaign: "RM | ABO", spend: 43.59, leads: 1, cpl: 43.59, clicks: 153, ctr: 4.57 },
+            { location: "Reuver", campaign: "Leads | CBO", spend: 80.71, leads: 1, cpl: 80.71, clicks: 258, ctr: 2.43 },
+            { location: "Reuver", campaign: "RM | ABO", spend: 32.07, leads: 0, cpl: 0, clicks: 116, ctr: 3.40 },
+            { location: "Kerkrade", campaign: "Leads | CBO", spend: 89.21, leads: 4, cpl: 22.30, clicks: 502, ctr: 4.78 },
+            { location: "Kerkrade", campaign: "RM | ABO", spend: 53.66, leads: 3, cpl: 17.89, clicks: 264, ctr: 4.88 }
+        ];
+
+        const locationColors = {
+            'Echt': '#667eea',
+            'Weert': '#764ba2',
+            'Budel': '#f093fb',
+            'Blerick 2.0': '#f5576c',
+            'Roermond': '#4facfe',
+            'Elst & Nijmegen': '#00f2fe',
+            'Sittard': '#43e97b',
+            'Nuth': '#fa709a',
+            'Reuver': '#fee140',
+            'Kerkrade': '#30cfd0'
+        };
+
+        // Aggregate by location
+        const locationData = {};
+        campaigns.forEach(c => {
+            if (!locationData[c.location]) {
+                locationData[c.location] = { spend: 0, leads: 0 };
+            }
+            locationData[c.location].spend += c.spend;
+            locationData[c.location].leads += c.leads;
+        });
+
+        const locations = Object.keys(locationData);
+        const locationCPL = locations.map(l => locationData[l].leads > 0 ? locationData[l].spend / locationData[l].leads : 0);
+        const locationSpend = locations.map(l => locationData[l].spend);
+        const locationLeads = locations.map(l => locationData[l].leads);
+
+        // CPL by Location Chart
+        new Chart(document.getElementById('cplByLocation'), {
+            type: 'bar',
+            data: {
+                labels: locations,
+                datasets: [{
+                    label: 'CPL (€)',
+                    data: locationCPL,
+                    backgroundColor: locations.map(l => locationColors[l] + 'cc'),
+                    borderColor: locations.map(l => locationColors[l]),
+                    borderWidth: 2,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ctx.parsed.y > 0 ? '€' + ctx.parsed.y.toFixed(2) + ' CPL' : 'No leads'
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.1)' },
+                        ticks: { color: '#888', callback: v => '€' + v }
+                    },
+                    x: { grid: { display: false }, ticks: { color: '#888', font: { size: 10 } } }
+                }
+            }
+        });
+
+        // Leads vs Spend scatter
+        new Chart(document.getElementById('leadsVsSpend'), {
+            type: 'bubble',
+            data: {
+                datasets: locations.map(l => ({
+                    label: l,
+                    data: [{ x: locationData[l].spend, y: locationData[l].leads, r: Math.max(8, locationData[l].leads * 3) }],
+                    backgroundColor: locationColors[l] + '99',
+                    borderColor: locationColors[l]
+                }))
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ctx.dataset.label + ': €' + ctx.parsed.x.toFixed(0) + ' spend, ' + ctx.parsed.y + ' leads'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Spend (€)', color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.1)' },
+                        ticks: { color: '#888', callback: v => '€' + v }
+                    },
+                    y: {
+                        title: { display: true, text: 'Leads', color: '#888' },
+                        grid: { color: 'rgba(255,255,255,0.1)' },
+                        ticks: { color: '#888' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // CPL by Campaign (only those with leads)
+        const campaignsWithLeads = campaigns.filter(c => c.leads > 0).sort((a, b) => a.cpl - b.cpl);
+        new Chart(document.getElementById('cplByCampaign'), {
+            type: 'bar',
+            data: {
+                labels: campaignsWithLeads.map(c => c.location + ' - ' + c.campaign),
+                datasets: [{
+                    label: 'CPL (€)',
+                    data: campaignsWithLeads.map(c => c.cpl),
+                    backgroundColor: campaignsWithLeads.map(c => {
+                        if (c.cpl <= 20) return '#00f26099';
+                        if (c.cpl <= 40) return '#43e97b99';
+                        if (c.cpl <= 60) return '#fee14099';
+                        return '#f5576c99';
+                    }),
+                    borderColor: campaignsWithLeads.map(c => {
+                        if (c.cpl <= 20) return '#00f260';
+                        if (c.cpl <= 40) return '#43e97b';
+                        if (c.cpl <= 60) return '#fee140';
+                        return '#f5576c';
+                    }),
+                    borderWidth: 2,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => '€' + ctx.parsed.x.toFixed(2) + ' per lead'
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.1)' },
+                        ticks: { color: '#888', callback: v => '€' + v }
+                    },
+                    y: { grid: { display: false }, ticks: { color: '#ccc', font: { size: 11 } } }
+                }
+            }
+        });
+
+        // Resize campaign chart
+        document.getElementById('cplByCampaign').parentElement.style.height = (campaignsWithLeads.length * 35 + 80) + 'px';
+
+        // Populate table
+        const tbody = document.querySelector('#campaignTable tbody');
+        campaigns.sort((a, b) => (a.cpl || 999) - (b.cpl || 999)).forEach(c => {
+            const cplClass = c.cpl === 0 ? 'no-leads' : c.cpl <= 25 ? 'cpl-good' : c.cpl <= 50 ? 'cpl-medium' : 'cpl-bad';
+            const cplText = c.cpl === 0 ? 'No leads' : '€' + c.cpl.toFixed(2);
+            tbody.innerHTML += `
+                <tr>
+                    <td><span class="location-tag" style="background:${locationColors[c.location]}33;color:${locationColors[c.location]}">${c.location}</span></td>
+                    <td>${c.campaign}</td>
+                    <td>€${c.spend.toFixed(2)}</td>
+                    <td>${c.leads}</td>
+                    <td class="${cplClass}">${cplText}</td>
+                    <td>${c.clicks}</td>
+                    <td>${c.ctr.toFixed(2)}%</td>
+                </tr>
+            `;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My35' Spend vs Performance - Last 7 Days</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            padding: 40px;
+            color: #fff;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00f260 0%, #0575e6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        .charts-wrapper {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 30px;
+        }
+        .chart-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .chart-title {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .chart-title span {
+            font-size: 1.5rem;
+        }
+        .efficiency-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+        .efficiency-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .efficiency-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+        }
+        .efficiency-card.best::before {
+            background: linear-gradient(90deg, #00f260, #0575e6);
+        }
+        .efficiency-card.worst::before {
+            background: linear-gradient(90deg, #f5576c, #f093fb);
+        }
+        .efficiency-card h3 {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .efficiency-card .location {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 15px;
+        }
+        .efficiency-card .metrics {
+            display: flex;
+            gap: 20px;
+        }
+        .efficiency-card .metric {
+            text-align: center;
+        }
+        .efficiency-card .metric-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #00f260;
+        }
+        .efficiency-card.worst .metric-value {
+            color: #f5576c;
+        }
+        .efficiency-card .metric-label {
+            font-size: 0.75rem;
+            color: #666;
+        }
+        .insight-box {
+            background: linear-gradient(135deg, rgba(0, 242, 96, 0.1), rgba(5, 117, 230, 0.1));
+            border: 1px solid rgba(0, 242, 96, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+        }
+        .insight-box h3 {
+            color: #00f260;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .insight-box p {
+            color: #ccc;
+            line-height: 1.6;
+        }
+        .insight-box strong {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Spend vs Performance</h1>
+        <p class="subtitle">Identifying efficiency across all My35' locations (Jan 16 - Jan 22, 2026)</p>
+
+        <div class="charts-wrapper">
+            <div class="chart-container">
+                <div class="chart-title"><span>📊</span> Spend (Bars) vs CTR % (Line)</div>
+                <canvas id="spendCtrChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title"><span>💰</span> Cost per Click (CPC) - Lower is Better</div>
+                <canvas id="cpcChart"></canvas>
+            </div>
+        </div>
+
+        <div class="efficiency-grid">
+            <div class="efficiency-card best">
+                <h3>🏆 Most Efficient (Best CTR)</h3>
+                <div class="location">Sittard</div>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value">5.29%</div>
+                        <div class="metric-label">CTR</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">€0.17</div>
+                        <div class="metric-label">CPC</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">€38.37</div>
+                        <div class="metric-label">Spend</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="efficiency-card best">
+                <h3>💎 Best Value (Lowest CPC)</h3>
+                <div class="location">Sittard</div>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value">€0.17</div>
+                        <div class="metric-label">CPC</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">223</div>
+                        <div class="metric-label">Clicks</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">5.29%</div>
+                        <div class="metric-label">CTR</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="efficiency-card worst">
+                <h3>⚠️ Needs Attention (Highest CPC)</h3>
+                <div class="location">Elst & Nijmegen</div>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value">€0.56</div>
+                        <div class="metric-label">CPC</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">€628</div>
+                        <div class="metric-label">Spend</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">2.78%</div>
+                        <div class="metric-label">CTR</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="efficiency-card worst">
+                <h3>📉 Lowest CTR</h3>
+                <div class="location">Roermond</div>
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-value">2.61%</div>
+                        <div class="metric-label">CTR</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">€0.37</div>
+                        <div class="metric-label">CPC</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-value">€184</div>
+                        <div class="metric-label">Spend</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="insight-box">
+            <h3>💡 Key Insights</h3>
+            <p>
+                <strong>Sittard</strong> is your efficiency champion with the highest CTR (5.29%) and lowest CPC (€0.17),
+                despite having the smallest budget. Consider increasing budget here.
+                <br><br>
+                <strong>Elst & Nijmegen</strong> has the highest spend (€628) but also the highest CPC (€0.56).
+                Review ad creatives and targeting to improve efficiency.
+                <br><br>
+                <strong>Echt & Kerkrade</strong> show excellent CTR (~4.8%) with reasonable CPC (~€0.19-0.23) -
+                these are performing well and could scale.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const data = {
+            "My35' Echt": { spend: 177.45, ctr: 4.85, cpc: 0.23, clicks: 760 },
+            "My35' Weert": { spend: 142.50, ctr: 3.13, cpc: 0.28, clicks: 506 },
+            "My35' Budel": { spend: 120.68, ctr: 3.09, cpc: 0.28, clicks: 428 },
+            "My35' Roermond": { spend: 183.98, ctr: 2.61, cpc: 0.37, clicks: 501 },
+            "My35' Elst & Nijmegen": { spend: 628.19, ctr: 2.78, cpc: 0.56, clicks: 1118 },
+            "My35' Sittard": { spend: 38.37, ctr: 5.29, cpc: 0.17, clicks: 223 },
+            "My35' Nuth": { spend: 172.61, ctr: 3.43, cpc: 0.37, clicks: 463 },
+            "My35' Reuver": { spend: 112.78, ctr: 2.66, cpc: 0.30, clicks: 374 },
+            "My35' Kerkrade": { spend: 142.87, ctr: 4.81, cpc: 0.19, clicks: 766 }
+        };
+
+        const labels = Object.keys(data).map(l => l.replace("My35' ", ""));
+        const spendData = Object.values(data).map(d => d.spend);
+        const ctrData = Object.values(data).map(d => d.ctr);
+        const cpcData = Object.values(data).map(d => d.cpc);
+
+        // Spend vs CTR Chart
+        const ctx1 = document.getElementById('spendCtrChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Spend (€)',
+                        data: spendData,
+                        backgroundColor: 'rgba(5, 117, 230, 0.7)',
+                        borderColor: '#0575e6',
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'CTR (%)',
+                        data: ctrData,
+                        type: 'line',
+                        borderColor: '#00f260',
+                        backgroundColor: 'rgba(0, 242, 96, 0.1)',
+                        borderWidth: 4,
+                        pointRadius: 8,
+                        pointBackgroundColor: '#00f260',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                aspectRatio: 2.5,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#ccc', padding: 20, usePointStyle: true }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                        padding: 15,
+                        cornerRadius: 10,
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'Spend (€)') {
+                                    return 'Spend: €' + context.parsed.y.toFixed(2);
+                                }
+                                return 'CTR: ' + context.parsed.y.toFixed(2) + '%';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#888', font: { size: 11 } }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: {
+                            color: '#0575e6',
+                            callback: function(value) { return '€' + value; }
+                        },
+                        title: { display: true, text: 'Spend (€)', color: '#0575e6' }
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
+                        ticks: {
+                            color: '#00f260',
+                            callback: function(value) { return value + '%'; }
+                        },
+                        title: { display: true, text: 'CTR (%)', color: '#00f260' },
+                        min: 0,
+                        max: 7
+                    }
+                }
+            }
+        });
+
+        // CPC Chart
+        const cpcColors = cpcData.map(cpc => {
+            if (cpc <= 0.20) return '#00f260';
+            if (cpc <= 0.30) return '#43e97b';
+            if (cpc <= 0.40) return '#fee140';
+            return '#f5576c';
+        });
+
+        const ctx2 = document.getElementById('cpcChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Cost per Click (€)',
+                    data: cpcData,
+                    backgroundColor: cpcColors.map(c => c + 'cc'),
+                    borderColor: cpcColors,
+                    borderWidth: 2,
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                aspectRatio: 2.5,
+                indexAxis: 'y',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                        padding: 15,
+                        cornerRadius: 10,
+                        callbacks: {
+                            label: function(context) {
+                                return 'CPC: €' + context.parsed.x.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: {
+                            color: '#888',
+                            callback: function(value) { return '€' + value.toFixed(2); }
+                        },
+                        min: 0,
+                        max: 0.7
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#ccc' }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

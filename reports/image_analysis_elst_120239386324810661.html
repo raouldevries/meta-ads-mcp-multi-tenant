@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creative Analysis Report</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f7;
+            --bg-tertiary: #e8e8ed;
+            --text-primary: #1d1d1f;
+            --text-secondary: #6e6e73;
+            --text-tertiary: #86868b;
+            --accent: #0071e3;
+            --success: #34c759;
+            --warning: #ff9500;
+            --danger: #ff3b30;
+            --border: #d2d2d7;
+            --shadow: rgba(0, 0, 0, 0.04);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.47059;
+            font-size: 17px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 48px 24px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            font-weight: 600;
+            letter-spacing: -0.003em;
+            margin-bottom: 8px;
+        }
+
+        .header .subtitle {
+            font-size: 21px;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        /* Summary Card */
+        .summary-card {
+            background: var(--bg-primary);
+            border-radius: 18px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 12px var(--shadow);
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 32px;
+            align-items: start;
+        }
+
+        .image-preview {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .image-preview img {
+            width: 100%;
+            display: block;
+        }
+
+        .summary-details {
+            padding: 8px 0;
+        }
+
+        .summary-details h2 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            letter-spacing: -0.003em;
+        }
+
+        .summary-details .ad-id {
+            font-size: 14px;
+            color: var(--text-tertiary);
+            font-family: 'SF Mono', monospace;
+            margin-bottom: 20px;
+        }
+
+        .summary-meta {
+            display: flex;
+            gap: 32px;
+            margin-bottom: 24px;
+        }
+
+        .meta-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .meta-label {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .meta-value {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .key-finding {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .key-finding i {
+            color: var(--warning);
+            font-size: 18px;
+            margin-top: 2px;
+        }
+
+        .key-finding-text {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        /* Metrics Grid */
+        .metrics-section {
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            letter-spacing: -0.003em;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .metric-card {
+            background: var(--bg-primary);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 12px var(--shadow);
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .metric-status.good { background: var(--success); }
+        .metric-status.warning { background: var(--warning); }
+        .metric-status.bad { background: var(--danger); }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .metric-note {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            margin-top: 4px;
+        }
+
+        /* Analysis Sections */
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .analysis-card {
+            background: var(--bg-primary);
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 2px 12px var(--shadow);
+        }
+
+        .analysis-card h3 {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .analysis-card h3 i {
+            color: var(--text-tertiary);
+            font-size: 16px;
+        }
+
+        .analysis-list {
+            list-style: none;
+        }
+
+        .analysis-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .analysis-list li:last-child {
+            border-bottom: none;
+        }
+
+        .analysis-list .label {
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+
+        .analysis-list .value {
+            font-weight: 500;
+            font-size: 15px;
+        }
+
+        .score-bar {
+            width: 80px;
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+        }
+
+        /* Visual Hierarchy */
+        .hierarchy-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        .hierarchy-item:last-child {
+            border-bottom: none;
+        }
+
+        .hierarchy-number {
+            width: 28px;
+            height: 28px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+        }
+
+        .hierarchy-text {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        /* Issues Section */
+        .issues-section {
+            margin-bottom: 24px;
+        }
+
+        .issue-card {
+            background: var(--bg-primary);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 12px var(--shadow);
+            border-left: 4px solid;
+        }
+
+        .issue-card.high { border-left-color: var(--danger); }
+        .issue-card.medium { border-left-color: var(--warning); }
+        .issue-card.low { border-left-color: var(--success); }
+
+        .issue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .issue-title {
+            font-size: 17px;
+            font-weight: 600;
+        }
+
+        .issue-priority {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 10px;
+            border-radius: 6px;
+        }
+
+        .issue-priority.high { background: #ffebeb; color: var(--danger); }
+        .issue-priority.medium { background: #fff4e5; color: var(--warning); }
+        .issue-priority.low { background: #e8f7ed; color: var(--success); }
+
+        .issue-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .issue-detail {
+            font-size: 14px;
+        }
+
+        .issue-detail-label {
+            color: var(--text-tertiary);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .issue-detail-value {
+            color: var(--text-secondary);
+        }
+
+        /* Strengths */
+        .strengths-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .strength-card {
+            background: var(--bg-primary);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 2px 12px var(--shadow);
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+        }
+
+        .strength-icon {
+            width: 36px;
+            height: 36px;
+            background: #e8f7ed;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--success);
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .strength-text {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* Recommendations */
+        .recommendation-card {
+            background: var(--bg-primary);
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 12px var(--shadow);
+        }
+
+        .rec-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .rec-title {
+            font-size: 19px;
+            font-weight: 600;
+        }
+
+        .rec-content {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .rec-item {
+            font-size: 14px;
+        }
+
+        .rec-item-label {
+            color: var(--text-tertiary);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .rec-item-value {
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* Color Pills */
+        .color-pills {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .color-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 32px 0;
+            color: var(--text-tertiary);
+            font-size: 13px;
+        }
+
+        @media (max-width: 768px) {
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+            .analysis-grid {
+                grid-template-columns: 1fr;
+            }
+            .issue-details, .rec-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Creative Analysis</h1>
+            <p class="subtitle">Image Performance Report</p>
+        </header>
+
+        <!-- Summary Card -->
+        <div class="summary-card">
+            <div class="summary-grid">
+                <div class="image-preview">
+                    <img src="my35_elst_square.png" alt="Ad Creative">
+                </div>
+                <div class="summary-details">
+                    <h2>Elst - Single Image - 35 minuten</h2>
+                    <div class="ad-id">ID: 120239386324810661</div>
+
+                    <div class="summary-meta">
+                        <div class="meta-item">
+                            <span class="meta-label">Spend</span>
+                            <span class="meta-value">&euro;20.34</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Impressions</span>
+                            <span class="meta-value">1,421</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Clicks</span>
+                            <span class="meta-value">18</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Status</span>
+                            <span class="meta-value">Paused</span>
+                        </div>
+                    </div>
+
+                    <div class="key-finding">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span class="key-finding-text">
+                            <strong>Key Finding:</strong> Well-composed image with strong social proof but targeting mismatch. Image shows male client while targeting women 50+.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics -->
+        <section class="metrics-section">
+            <h2 class="section-title">Performance Metrics</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">CTR</span>
+                        <span class="metric-status warning"></span>
+                    </div>
+                    <div class="metric-value">1.27%</div>
+                    <div class="metric-note">Below average</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">CPC</span>
+                        <span class="metric-status warning"></span>
+                    </div>
+                    <div class="metric-value">&euro;1.13</div>
+                    <div class="metric-note">High for lead gen</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">CPM</span>
+                        <span class="metric-status good"></span>
+                    </div>
+                    <div class="metric-value">&euro;14.31</div>
+                    <div class="metric-note">Reasonable</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">Reach</span>
+                        <span class="metric-status warning"></span>
+                    </div>
+                    <div class="metric-value">492</div>
+                    <div class="metric-note">Limited scale</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">Frequency</span>
+                        <span class="metric-status warning"></span>
+                    </div>
+                    <div class="metric-value">2.89</div>
+                    <div class="metric-note">High fatigue risk</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-label">LPV Rate</span>
+                        <span class="metric-status bad"></span>
+                    </div>
+                    <div class="metric-value">11%</div>
+                    <div class="metric-note">Of link clicks</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Visual Analysis -->
+        <section class="analysis-grid">
+            <div class="analysis-card">
+                <h3><i class="fas fa-layer-group"></i> Visual Hierarchy</h3>
+                <div class="hierarchy-item">
+                    <span class="hierarchy-number">1</span>
+                    <span class="hierarchy-text">Two people (trainer + client)</span>
+                </div>
+                <div class="hierarchy-item">
+                    <span class="hierarchy-number">2</span>
+                    <span class="hierarchy-text">My35 logo and branding</span>
+                </div>
+                <div class="hierarchy-item">
+                    <span class="hierarchy-number">3</span>
+                    <span class="hierarchy-text">"35 MINUTEN" headline</span>
+                </div>
+                <div class="hierarchy-item">
+                    <span class="hierarchy-number">4</span>
+                    <span class="hierarchy-text">Social proof (stars + reviews)</span>
+                </div>
+                <div class="hierarchy-item">
+                    <span class="hierarchy-number">5</span>
+                    <span class="hierarchy-text">"Elst" location badge</span>
+                </div>
+            </div>
+
+            <div class="analysis-card">
+                <h3><i class="fas fa-palette"></i> Color Analysis</h3>
+                <div class="color-pills">
+                    <div class="color-pill">
+                        <span class="color-dot" style="background: #1e3a5f;"></span>
+                        Navy Blue
+                    </div>
+                    <div class="color-pill">
+                        <span class="color-dot" style="background: #e91e8c;"></span>
+                        Magenta
+                    </div>
+                    <div class="color-pill">
+                        <span class="color-dot" style="background: #ffffff; border: 1px solid #d2d2d7;"></span>
+                        White
+                    </div>
+                    <div class="color-pill">
+                        <span class="color-dot" style="background: #e53935;"></span>
+                        Red
+                    </div>
+                </div>
+                <ul class="analysis-list" style="margin-top: 16px;">
+                    <li>
+                        <span class="label">Brand Consistency</span>
+                        <span class="value">Strong</span>
+                    </li>
+                    <li>
+                        <span class="label">Color Psychology</span>
+                        <span class="value">Appropriate</span>
+                    </li>
+                    <li>
+                        <span class="label">Feminine Appeal</span>
+                        <span class="value">Good (pink accents)</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="analysis-card">
+                <h3><i class="fas fa-vector-square"></i> Composition</h3>
+                <ul class="analysis-list">
+                    <li>
+                        <span class="label">Rule of Thirds</span>
+                        <span class="value"><i class="fas fa-check" style="color: var(--success);"></i></span>
+                    </li>
+                    <li>
+                        <span class="label">Leading Lines</span>
+                        <span class="value"><i class="fas fa-check" style="color: var(--success);"></i></span>
+                    </li>
+                    <li>
+                        <span class="label">Framing</span>
+                        <span class="value"><i class="fas fa-check" style="color: var(--success);"></i></span>
+                    </li>
+                    <li>
+                        <span class="label">Negative Space</span>
+                        <span class="value">Limited</span>
+                    </li>
+                    <li>
+                        <span class="label">Overall Score</span>
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: 75%;"></div>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="analysis-card">
+                <h3><i class="fas fa-user"></i> Subject Analysis</h3>
+                <ul class="analysis-list">
+                    <li>
+                        <span class="label">People Visible</span>
+                        <span class="value">2 (trainer + client)</span>
+                    </li>
+                    <li>
+                        <span class="label">Client Gender</span>
+                        <span class="value" style="color: var(--danger);">Male (mismatch)</span>
+                    </li>
+                    <li>
+                        <span class="label">Client Age</span>
+                        <span class="value" style="color: var(--danger);">~30s (mismatch)</span>
+                    </li>
+                    <li>
+                        <span class="label">Eye Contact</span>
+                        <span class="value">None direct</span>
+                    </li>
+                    <li>
+                        <span class="label">Expressions</span>
+                        <span class="value">Both smiling</span>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Issues -->
+        <section class="issues-section">
+            <h2 class="section-title">Key Issues</h2>
+
+            <div class="issue-card high">
+                <div class="issue-header">
+                    <span class="issue-title">Target Audience Mismatch</span>
+                    <span class="issue-priority high">High Priority</span>
+                </div>
+                <div class="issue-details">
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Current State</div>
+                        <div class="issue-detail-value">Young male client (~30s) featured in image</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Target Audience</div>
+                        <div class="issue-detail-value">Women 50+</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Problem</div>
+                        <div class="issue-detail-value">Primary audience cannot see themselves in this ad</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Impact</div>
+                        <div class="issue-detail-value">Significant CTR reduction, lower relevance score</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="issue-card medium">
+                <div class="issue-header">
+                    <span class="issue-title">No Direct Eye Contact</span>
+                    <span class="issue-priority medium">Medium Priority</span>
+                </div>
+                <div class="issue-details">
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Current State</div>
+                        <div class="issue-detail-value">Client looks at equipment, trainer looks at client</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Problem</div>
+                        <div class="issue-detail-value">No one engaging directly with viewer</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Impact</div>
+                        <div class="issue-detail-value">Lower scroll-stopping power in feed</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Benchmark</div>
+                        <div class="issue-detail-value">Direct eye contact increases engagement 10-15%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="issue-card medium">
+                <div class="issue-header">
+                    <span class="issue-title">High Frequency</span>
+                    <span class="issue-priority medium">Medium Priority</span>
+                </div>
+                <div class="issue-details">
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Current</div>
+                        <div class="issue-detail-value">2.89 frequency</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Problem</div>
+                        <div class="issue-detail-value">Same audience seeing ad nearly 3x</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Impact</div>
+                        <div class="issue-detail-value">Ad fatigue, diminishing returns</div>
+                    </div>
+                    <div class="issue-detail">
+                        <div class="issue-detail-label">Recommended</div>
+                        <div class="issue-detail-value">Keep frequency below 2.0</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Strengths -->
+        <section class="strengths-section" style="margin-bottom: 24px;">
+            <h2 class="section-title">Strengths</h2>
+            <div class="strengths-grid">
+                <div class="strength-card">
+                    <div class="strength-icon"><i class="fas fa-star"></i></div>
+                    <div class="strength-text"><strong>Strong Social Proof</strong><br>8.7 rating with 1,529 reviews prominently displayed</div>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-icon"><i class="fas fa-bullseye"></i></div>
+                    <div class="strength-text"><strong>Clear Value Prop</strong><br>"35 MINUTEN" immediately communicates the benefit</div>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-icon"><i class="fas fa-camera"></i></div>
+                    <div class="strength-text"><strong>Professional Quality</strong><br>Sharp image, good lighting, authentic gym setting</div>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-icon"><i class="fas fa-expand"></i></div>
+                    <div class="strength-text"><strong>Platform Optimized</strong><br>Has all 3 aspect ratios (1:1, 16:9, 9:16)</div>
+                </div>
+                <div class="strength-card">
+                    <div class="strength-icon"><i class="fas fa-trademark"></i></div>
+                    <div class="strength-text"><strong>Brand Consistency</strong><br>Strong My35 branding with consistent colors</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recommendations -->
+        <section class="recommendations-section">
+            <h2 class="section-title">Recommendations</h2>
+
+            <div class="recommendation-card">
+                <div class="rec-header">
+                    <span class="rec-title">1. Replace with Target Demographic</span>
+                    <span class="issue-priority high">High Priority</span>
+                </div>
+                <div class="rec-content">
+                    <div class="rec-item">
+                        <div class="rec-item-label">Current State</div>
+                        <div class="rec-item-value">Young male client featured</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">Solution</div>
+                        <div class="rec-item-value">Reshoot with a woman 50+ as the client</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">Expected Impact</div>
+                        <div class="rec-item-value">+50-100% CTR improvement</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">A/B Test</div>
+                        <div class="rec-item-value">Same composition, different client demographic</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recommendation-card">
+                <div class="rec-header">
+                    <span class="rec-title">2. Add Direct Eye Contact Variant</span>
+                    <span class="issue-priority medium">Medium Priority</span>
+                </div>
+                <div class="rec-content">
+                    <div class="rec-item">
+                        <div class="rec-item-label">Current State</div>
+                        <div class="rec-item-value">No one looking at camera</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">Solution</div>
+                        <div class="rec-item-value">Create variant where trainer or client looks at camera</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">Expected Impact</div>
+                        <div class="rec-item-value">+15-25% engagement increase</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">A/B Test</div>
+                        <div class="rec-item-value">Current vs. direct eye contact version</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recommendation-card">
+                <div class="rec-header">
+                    <span class="rec-title">3. Test Testimonial Approach</span>
+                    <span class="issue-priority low">Low Priority</span>
+                </div>
+                <div class="rec-content">
+                    <div class="rec-item">
+                        <div class="rec-item-label">Current State</div>
+                        <div class="rec-item-value">Generic gym scene</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">Solution</div>
+                        <div class="rec-item-value">Feature a real member 50+ with quote overlay</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">Expected Impact</div>
+                        <div class="rec-item-value">Higher authenticity, better targeting match</div>
+                    </div>
+                    <div class="rec-item">
+                        <div class="rec-item-label">Example</div>
+                        <div class="rec-item-value">"Na 3 maanden voel ik me 10 jaar jonger!" - Maria, 58</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Generated by Creative Analyzer Agent</p>
+            <p>Ad Account: my35_elst_nijmegen | Date: January 24, 2026</p>
+        </footer>
+    </div>
+</body>
+</html>

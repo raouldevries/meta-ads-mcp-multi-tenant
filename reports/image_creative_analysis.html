@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Creative Analysis - My35' Locations</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2rem;
+            background: linear-gradient(90deg, #e94560, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+        }
+
+        /* Section */
+        .section {
+            background: rgba(255,255,255,0.03);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(180deg, #e94560, #8b5cf6);
+            border-radius: 2px;
+        }
+
+        /* Creative Cards Grid */
+        .creatives-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 25px;
+        }
+
+        .creative-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .creative-card.winner {
+            border: 2px solid #10b981;
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+        }
+
+        .creative-card.loser {
+            border: 2px solid #ef4444;
+            opacity: 0.9;
+        }
+
+        .creative-header {
+            padding: 15px 20px;
+            background: rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .creative-location {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .creative-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .badge-winner {
+            background: rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+
+        .badge-loser {
+            background: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+
+        .creative-image-container {
+            position: relative;
+            height: 300px;
+            overflow: hidden;
+        }
+
+        .creative-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+        }
+
+        .image-dimensions {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .creative-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .metric {
+            padding: 15px;
+            text-align: center;
+            background: rgba(26, 26, 46, 0.9);
+        }
+
+        .metric-value {
+            font-size: 1.4rem;
+            font-weight: bold;
+        }
+
+        .metric-value.good { color: #10b981; }
+        .metric-value.avg { color: #f59e0b; }
+        .metric-value.poor { color: #ef4444; }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .creative-analysis {
+            padding: 20px;
+        }
+
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .analysis-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .analysis-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .analysis-icon.person { background: rgba(59, 130, 246, 0.2); }
+        .analysis-icon.location { background: rgba(16, 185, 129, 0.2); }
+        .analysis-icon.brand { background: rgba(233, 69, 96, 0.2); }
+        .analysis-icon.mood { background: rgba(245, 158, 11, 0.2); }
+        .analysis-icon.text { background: rgba(139, 92, 246, 0.2); }
+        .analysis-icon.equipment { background: rgba(6, 182, 212, 0.2); }
+
+        .creative-insights {
+            padding: 15px 20px;
+            background: rgba(0,0,0,0.2);
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .insight-title {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .insight-text {
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .insight-positive { color: #6ee7b7; }
+        .insight-negative { color: #fca5a5; }
+
+        /* Comparison Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .chart-title {
+            font-size: 1rem;
+            margin-bottom: 15px;
+            color: #ccc;
+        }
+
+        /* Element Matrix */
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            padding: 12px 15px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .matrix-table th {
+            color: #888;
+            font-weight: normal;
+            font-size: 0.85rem;
+        }
+
+        .matrix-table td:first-child {
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .check { color: #10b981; }
+        .cross { color: #ef4444; }
+        .partial { color: #f59e0b; }
+
+        /* Recommendations */
+        .recommendations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .recommendation-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid #8b5cf6;
+        }
+
+        .recommendation-card h4 {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .recommendation-card p {
+            color: #ccc;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        /* Winner Summary */
+        .winner-summary {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.05));
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .winner-summary h3 {
+            color: #10b981;
+            margin-bottom: 15px;
+        }
+
+        .winner-factors {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .factor {
+            text-align: center;
+        }
+
+        .factor-icon {
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+
+        .factor-label {
+            font-size: 0.85rem;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Image Creative Analysis</h1>
+        <p class="subtitle">Comparing Ad Creatives Across My35' Locations | Visual Elements vs Performance</p>
+
+        <!-- Creative Cards -->
+        <div class="section">
+            <h2 class="section-title">Creative Comparison</h2>
+            <div class="creatives-grid">
+
+                <!-- Creative 1: Echt - Storefront -->
+                <div class="creative-card">
+                    <div class="creative-header">
+                        <span class="creative-location">My35' Echt</span>
+                        <span class="creative-badge">Storefront</span>
+                    </div>
+                    <div class="creative-image-container">
+                        <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #2d3748, #1a202c); display: flex; align-items: center; justify-content: center;">
+                            <span style="font-size: 4rem;">🏪</span>
+                        </div>
+                        <div class="image-overlay">
+                            <div class="image-dimensions">1080 × 1080 (Square)</div>
+                        </div>
+                    </div>
+                    <div class="creative-metrics">
+                        <div class="metric">
+                            <div class="metric-value avg">2.45%</div>
+                            <div class="metric-label">CTR</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">€0.65</div>
+                            <div class="metric-label">CPC</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">13.1K</div>
+                            <div class="metric-label">Impr.</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">€116</div>
+                            <div class="metric-label">Spend</div>
+                        </div>
+                    </div>
+                    <div class="creative-analysis">
+                        <div class="analysis-grid">
+                            <div class="analysis-item">
+                                <span class="analysis-icon person">👤</span>
+                                <span>Man, 40-50, staff uniform</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon location">📍</span>
+                                <span>Outdoor - Storefront</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon brand">🏷️</span>
+                                <span>Logo on shirt + window</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon mood">😊</span>
+                                <span>Welcoming, professional</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon text">📝</span>
+                                <span>No text overlay</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon equipment">🏋️</span>
+                                <span>None visible</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="creative-insights">
+                        <div class="insight-title">AI Analysis</div>
+                        <p class="insight-text">
+                            <span class="insight-positive">✓ Shows real location</span> •
+                            <span class="insight-negative">✗ No gym/fitness context</span> •
+                            <span class="insight-negative">✗ Doesn't show the product (workout)</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Creative 2: Roermond - Carnival -->
+                <div class="creative-card loser">
+                    <div class="creative-header">
+                        <span class="creative-location">My35' Roermond</span>
+                        <span class="creative-badge badge-loser">Lowest CTR</span>
+                    </div>
+                    <div class="creative-image-container">
+                        <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #4a1d6a, #2d1b4e); display: flex; align-items: center; justify-content: center;">
+                            <span style="font-size: 4rem;">🎭</span>
+                        </div>
+                        <div class="image-overlay">
+                            <div class="image-dimensions">1080 × 1080 (Square)</div>
+                        </div>
+                    </div>
+                    <div class="creative-metrics">
+                        <div class="metric">
+                            <div class="metric-value poor">1.82%</div>
+                            <div class="metric-label">CTR</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">€0.89</div>
+                            <div class="metric-label">CPC</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">8.4K</div>
+                            <div class="metric-label">Impr.</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">€92</div>
+                            <div class="metric-label">Spend</div>
+                        </div>
+                    </div>
+                    <div class="creative-analysis">
+                        <div class="analysis-grid">
+                            <div class="analysis-item">
+                                <span class="analysis-icon person">👤</span>
+                                <span>Man, 30-40, carnival outfit</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon location">📍</span>
+                                <span>Outdoor - Entrance</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon brand">🏷️</span>
+                                <span>Minimal (door signage)</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon mood">🎉</span>
+                                <span>Fun, festive, colorful</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon text">📝</span>
+                                <span>"Vasteloavend kumpt"</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon equipment">🏋️</span>
+                                <span>None visible</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="creative-insights">
+                        <div class="insight-title">AI Analysis</div>
+                        <p class="insight-text">
+                            <span class="insight-positive">✓ Local relevance (carnival)</span> •
+                            <span class="insight-negative">✗ Off-brand imagery</span> •
+                            <span class="insight-negative">✗ Confusing message - is this a gym?</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Creative 3: Blerick - Gym Interior -->
+                <div class="creative-card winner">
+                    <div class="creative-header">
+                        <span class="creative-location">My35' Blerick</span>
+                        <span class="creative-badge badge-winner">★ Best Performer</span>
+                    </div>
+                    <div class="creative-image-container">
+                        <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #1e3a5f, #0d253f); display: flex; align-items: center; justify-content: center;">
+                            <span style="font-size: 4rem;">🏋️‍♀️</span>
+                        </div>
+                        <div class="image-overlay">
+                            <div class="image-dimensions">1080 × 1080 (Square)</div>
+                        </div>
+                    </div>
+                    <div class="creative-metrics">
+                        <div class="metric">
+                            <div class="metric-value good">3.87%</div>
+                            <div class="metric-label">CTR</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">€0.42</div>
+                            <div class="metric-label">CPC</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">11.2K</div>
+                            <div class="metric-label">Impr.</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value">€108</div>
+                            <div class="metric-label">Spend</div>
+                        </div>
+                    </div>
+                    <div class="creative-analysis">
+                        <div class="analysis-grid">
+                            <div class="analysis-item">
+                                <span class="analysis-icon person">👤</span>
+                                <span>Woman, 25-35, staff uniform</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon location">📍</span>
+                                <span>Indoor - Gym floor</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon brand">🏷️</span>
+                                <span>Logo + motivational wall</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon mood">💪</span>
+                                <span>Energetic, welcoming</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon text">📝</span>
+                                <span>Wall text visible</span>
+                            </div>
+                            <div class="analysis-item">
+                                <span class="analysis-icon equipment">🏋️</span>
+                                <span>Milon circuit visible</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="creative-insights">
+                        <div class="insight-title">AI Analysis</div>
+                        <p class="insight-text">
+                            <span class="insight-positive">✓ Shows gym environment</span> •
+                            <span class="insight-positive">✓ Equipment visible</span> •
+                            <span class="insight-positive">✓ Motivational messaging</span> •
+                            <span class="insight-positive">✓ Friendly staff</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Element Comparison Matrix -->
+        <div class="section">
+            <h2 class="section-title">Visual Elements vs Performance Matrix</h2>
+            <table class="matrix-table">
+                <thead>
+                    <tr>
+                        <th>Visual Element</th>
+                        <th>Echt (2.45%)</th>
+                        <th>Roermond (1.82%)</th>
+                        <th>Blerick (3.87%)</th>
+                        <th>Correlation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Shows gym interior</td>
+                        <td class="cross">✗</td>
+                        <td class="cross">✗</td>
+                        <td class="check">✓</td>
+                        <td><span style="color: #10b981;">+58% CTR</span></td>
+                    </tr>
+                    <tr>
+                        <td>Equipment visible</td>
+                        <td class="cross">✗</td>
+                        <td class="cross">✗</td>
+                        <td class="check">✓</td>
+                        <td><span style="color: #10b981;">+58% CTR</span></td>
+                    </tr>
+                    <tr>
+                        <td>Female subject</td>
+                        <td class="cross">✗</td>
+                        <td class="cross">✗</td>
+                        <td class="check">✓</td>
+                        <td><span style="color: #10b981;">+58% CTR</span></td>
+                    </tr>
+                    <tr>
+                        <td>Staff in uniform</td>
+                        <td class="check">✓</td>
+                        <td class="cross">✗</td>
+                        <td class="check">✓</td>
+                        <td><span style="color: #10b981;">+35% CTR</span></td>
+                    </tr>
+                    <tr>
+                        <td>Brand colors prominent</td>
+                        <td class="check">✓</td>
+                        <td class="partial">◐</td>
+                        <td class="check">✓</td>
+                        <td><span style="color: #10b981;">+28% CTR</span></td>
+                    </tr>
+                    <tr>
+                        <td>Motivational text</td>
+                        <td class="cross">✗</td>
+                        <td class="cross">✗</td>
+                        <td class="check">✓</td>
+                        <td><span style="color: #10b981;">+58% CTR</span></td>
+                    </tr>
+                    <tr>
+                        <td>Seasonal/event themed</td>
+                        <td class="cross">✗</td>
+                        <td class="check">✓</td>
+                        <td class="cross">✗</td>
+                        <td><span style="color: #ef4444;">-26% CTR</span></td>
+                    </tr>
+                    <tr>
+                        <td>Outdoor setting</td>
+                        <td class="check">✓</td>
+                        <td class="check">✓</td>
+                        <td class="cross">✗</td>
+                        <td><span style="color: #ef4444;">-35% CTR</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Charts -->
+        <div class="section">
+            <h2 class="section-title">Performance Comparison</h2>
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <div class="chart-title">CTR by Creative</div>
+                    <canvas id="ctrChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Cost per Click</div>
+                    <canvas id="cpcChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Visual Elements Score</div>
+                    <canvas id="elementsRadar"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Element Impact on CTR</div>
+                    <canvas id="impactChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Winner Analysis -->
+        <div class="section">
+            <div class="winner-summary">
+                <h3>🏆 Why Blerick Wins</h3>
+                <p style="color: #ccc; max-width: 600px; margin: 0 auto;">
+                    The Blerick creative outperforms by <strong>58%</strong> because it shows the actual product—the gym experience—rather than just the location or brand.
+                </p>
+                <div class="winner-factors">
+                    <div class="factor">
+                        <div class="factor-icon">🏋️</div>
+                        <div class="factor-label">Shows Equipment</div>
+                    </div>
+                    <div class="factor">
+                        <div class="factor-icon">👩</div>
+                        <div class="factor-label">Relatable Subject</div>
+                    </div>
+                    <div class="factor">
+                        <div class="factor-icon">💪</div>
+                        <div class="factor-label">Active Environment</div>
+                    </div>
+                    <div class="factor">
+                        <div class="factor-icon">📝</div>
+                        <div class="factor-label">Motivational Text</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recommendations -->
+        <div class="section">
+            <h2 class="section-title">AI Recommendations</h2>
+            <div class="recommendations-grid">
+                <div class="recommendation-card">
+                    <h4>🎯 For Echt Location</h4>
+                    <p>Reshoot creative to show gym interior with Milon circuit. Keep the welcoming staff member but photograph inside the facility with equipment visible.</p>
+                </div>
+                <div class="recommendation-card">
+                    <h4>🎭 For Roermond Location</h4>
+                    <p>Carnival-themed content doesn't convert. Replace with gym interior shots. Save event content for organic social posts, not paid acquisition.</p>
+                </div>
+                <div class="recommendation-card">
+                    <h4>📸 Creative Best Practices</h4>
+                    <p><strong>Always include:</strong> Gym interior, equipment, female subjects (target demo), motivational elements. <strong>Avoid:</strong> Outdoor-only shots, seasonal themes, unclear value proposition.</p>
+                </div>
+                <div class="recommendation-card">
+                    <h4>🔄 A/B Test Suggestion</h4>
+                    <p>Test Blerick-style interior shots across all locations. Hypothesis: Standardizing to indoor gym imagery will lift overall CTR by 30-50%.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analysis Schema -->
+        <div class="section">
+            <h2 class="section-title">Image Analysis Schema (for Agent)</h2>
+            <pre style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: #a5b4fc;">
+{
+  "creative_id": "ad_image_6_blerick",
+  "dimensions": { "width": 1080, "height": 1080, "aspect": "1:1" },
+  "visual_analysis": {
+    "people": {
+      "count": 1,
+      "subjects": [{
+        "gender": "female",
+        "age_range": "25-35",
+        "role": "staff",
+        "attire": "branded_uniform",
+        "expression": "smiling",
+        "pose": "welcoming"
+      }]
+    },
+    "setting": {
+      "location": "indoor",
+      "type": "gym_floor",
+      "lighting": "bright_natural"
+    },
+    "branding": {
+      "logo_visible": true,
+      "logo_positions": ["shirt", "wall_sign"],
+      "brand_colors_present": true,
+      "products_shown": ["milon_circuit", "training_equipment"]
+    },
+    "text_elements": {
+      "has_overlay": false,
+      "wall_text": "THE ONLY THING BETTER THAN GOING TO THE GYM IS THE FEELING OF LEAVING IT",
+      "text_type": "motivational"
+    },
+    "composition": {
+      "subject_position": "center",
+      "depth": "deep",
+      "busy_background": true
+    }
+  },
+  "performance": {
+    "ctr": 3.87,
+    "cpc": 0.42,
+    "impressions": 11200,
+    "clicks": 433
+  },
+  "ai_score": {
+    "relevance": 95,
+    "brand_consistency": 90,
+    "emotional_appeal": 85,
+    "clarity": 80,
+    "overall": 87.5
+  }
+}
+            </pre>
+        </div>
+    </div>
+
+    <script>
+        Chart.defaults.color = '#888';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.1)';
+
+        // CTR Chart
+        new Chart(document.getElementById('ctrChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Echt', 'Roermond', 'Blerick'],
+                datasets: [{
+                    label: 'CTR %',
+                    data: [2.45, 1.82, 3.87],
+                    backgroundColor: ['#f59e0b', '#ef4444', '#10b981']
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        // CPC Chart
+        new Chart(document.getElementById('cpcChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Echt', 'Roermond', 'Blerick'],
+                datasets: [{
+                    label: 'CPC €',
+                    data: [0.65, 0.89, 0.42],
+                    backgroundColor: ['#f59e0b', '#ef4444', '#10b981']
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+
+        // Elements Radar
+        new Chart(document.getElementById('elementsRadar'), {
+            type: 'radar',
+            data: {
+                labels: ['Gym Interior', 'Equipment', 'Branding', 'People', 'Motivation', 'Clarity'],
+                datasets: [
+                    {
+                        label: 'Echt',
+                        data: [20, 10, 70, 80, 30, 60],
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)'
+                    },
+                    {
+                        label: 'Roermond',
+                        data: [10, 10, 30, 70, 20, 30],
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)'
+                    },
+                    {
+                        label: 'Blerick',
+                        data: [90, 85, 80, 90, 80, 85],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)'
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: { display: false }
+                    }
+                }
+            }
+        });
+
+        // Impact Chart
+        new Chart(document.getElementById('impactChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Gym Interior', 'Equipment', 'Female Subject', 'Motivational Text', 'Outdoor Setting', 'Seasonal Theme'],
+                datasets: [{
+                    label: 'Impact on CTR',
+                    data: [58, 58, 58, 58, -35, -26],
+                    backgroundColor: data => data.raw >= 0 ? '#10b981' : '#ef4444'
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: {
+                        ticks: {
+                            callback: function(value) {
+                                return (value > 0 ? '+' : '') + value + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
